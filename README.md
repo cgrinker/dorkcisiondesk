@@ -72,6 +72,9 @@ Per race, the pipeline is **average → prior → blend → simulate**:
   retirements, independents who caucus).
 - House model (generic ballot + uniform swing + district PVI) is not wired up
   yet; the schema supports it.
+- Governor candidates/nominees come from Ballotpedia (no FEC for state
+  races); top-four states (AK) never resolve D/R nominees automatically and
+  pool all matchups.
 
 ## Data sources
 

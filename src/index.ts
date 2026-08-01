@@ -63,9 +63,11 @@ export default {
       }
 
       // Manual triggers for development; put behind auth before exposing publicly.
+      // ?force=1 bypasses per-source throttle gating (e.g. right after a
+      // primary is called). Cooldowns from upstream pushback also reset.
       case "/admin/scrape":
         if (request.method !== "POST") return json({ error: "POST only" }, 405);
-        return json(await scrapeAll(env));
+        return json(await scrapeAll(env, url.searchParams.get("force") === "1"));
 
       case "/admin/run":
         if (request.method !== "POST") return json({ error: "POST only" }, 405);

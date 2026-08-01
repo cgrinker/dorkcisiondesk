@@ -6,7 +6,7 @@ import { blend } from "../src/model/blend";
 import { simulate, chamberSummary, type SimRace } from "../src/model/simulate";
 import { matchCandidate, testsPrimaryLoser, type RaceCandidate } from "../src/scrapers/candidates";
 import { cooldownHours, isDue, markRan, startCooldown } from "../src/scrapers/throttle";
-import { parseNominees } from "../src/scrapers/nominees";
+import { parseCandidates, parseNominees } from "../src/scrapers/nominees";
 import type { Race, ScoredPoll } from "../src/types";
 
 function poll(overrides: Partial<ScoredPoll> = {}): ScoredPoll {
@@ -172,6 +172,32 @@ describe("ballotpedia nominee parsing", () => {
       { name: "Abdul El-Sayed", winner: false },
     ]);
     expect(parseNominees(html)).toEqual({});
+  });
+
+  it("harvests candidates with parties from general and primary blocks", () => {
+    const html =
+      `class="votebox"><div class="votebox-header-election-type">General election for Governor of Arizona</div>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Katie Hobbs</a> (D)  </td></tr>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Andy Biggs</a> (R)&#160;</td></tr>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Liana West</a> (G)&#160;(Write-in)</td></tr>` +
+      `class="votebox"><div class="votebox-header-election-type">Democratic primary for Governor of Arizona</div>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Marco Lopez</a> &#160;</td></tr>` +
+      `class="votebox"><div class="votebox-header-election-type">General election for Governor of Arizona</div>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Old Timer</a> (D)</td></tr>`;
+    expect(parseCandidates(html)).toEqual([
+      { name: "Katie Hobbs", party: "D" },
+      { name: "Andy Biggs", party: "R" },
+      { name: "Marco Lopez", party: "D" },
+    ]);
+  });
+
+  it("handles winner names wrapped in bold/underline (unopposed primaries)", () => {
+    const html =
+      `class="votebox"><div class="votebox-header-election-type">Democratic primary for Governor of Arizona</div>` +
+      `<tr class="results_row  winner"><td class="votebox-results-cell--check">&#10004;</td>` +
+      `<td class="votebox-results-cell--text"><b><u><a href="#">Katie Hobbs</a></u></b></td></tr>`;
+    expect(parseNominees(html)).toEqual({ D: "Katie Hobbs" });
+    expect(parseCandidates(html)).toEqual([{ name: "Katie Hobbs", party: "D" }]);
   });
 
   it("treats two primary winners as advanced-to-runoff, runoff as decisive", () => {

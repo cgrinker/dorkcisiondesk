@@ -27,8 +27,6 @@ frozen at Feb 2025 (still useful as a historical archive, CC-BY-4.0).
 
 ## Known gaps
 
-- **Governor races**: not seeded; VoteHub has the polls but party mapping needs
-  a non-FEC candidate source (Wikipedia).
 - **House district model**: needs district partisan leans. Cook PVI 2025
   spreadsheet is subscriber-only, and mid-decade redistricting (TX et al.)
   invalidates pre-2025 PVI for redrawn districts — recompute from MEDSL

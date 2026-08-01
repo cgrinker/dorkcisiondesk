@@ -58,85 +58,98 @@ function normPartisan(p: string | null): "D" | "R" | null {
   return null;
 }
 
-const votehubSenate: PollSource = {
-  name: "votehub-senate",
-  async fetch(env) {
-    const res = await fetch("https://api.votehub.com/polls?poll_type=us-senator&page_size=1000", {
-      headers: { "user-agent": USER_AGENT },
-    });
-    if (!res.ok) throw new HttpError(res.status, `votehub ${res.status}`);
-    const raw = (await res.json()) as VoteHubPoll[];
+function votehubSource(
+  name: string,
+  pollType: string,
+  raceIdForState: (abbr: string) => string,
+): PollSource {
+  return {
+    name,
+    async fetch(env) {
+      const res = await fetch(
+        `https://api.votehub.com/polls?poll_type=${pollType}&page_size=1000`,
+        { headers: { "user-agent": USER_AGENT } },
+      );
+      if (!res.ok) throw new HttpError(res.status, `votehub ${res.status}`);
+      const raw = (await res.json()) as VoteHubPoll[];
 
-    // Candidate lookup, per race.
-    const candidateRows = (
-      await env.DB.prepare(
-        "SELECT id, race_id, name, party, nominee FROM candidates",
-      ).all<RaceCandidate & { race_id: string }>()
-    ).results;
-    const byRace = new Map<string, RaceCandidate[]>();
-    for (const c of candidateRows) {
-      const list = byRace.get(c.race_id) ?? [];
-      list.push(c);
-      byRace.set(c.race_id, list);
-    }
-
-    const polls: Poll[] = [];
-    let unmapped = 0;
-    let loserMatchups = 0;
-    for (const p of raw) {
-      // "2026 Georgia" = general; "2026 Texas Democratic" = primary — skip primaries.
-      const m = /^(\d{4}) (.+?)( Democratic| Republican)?$/.exec(p.subject);
-      if (!m || m[1] !== env.CYCLE || m[3]) continue;
-      const abbr = STATE_ABBR[m[2]!];
-      if (!abbr) continue;
-      const raceId = SPECIALS.has(abbr) ? `sen-2026-${abbr}-special` : `sen-2026-${abbr}`;
-
-      const candidates = byRace.get(raceId) ?? [];
-      let dem: { pct: number; candidate: RaceCandidate | null } | null = null;
-      let rep: { pct: number; candidate: RaceCandidate | null } | null = null;
-      for (const a of p.answers) {
-        const match = matchCandidate(a.choice, candidates);
-        if (!match) continue;
-        if (match.party === "D" && a.pct > (dem?.pct ?? -1)) dem = { pct: a.pct, candidate: match.candidate };
-        if (match.party === "R" && a.pct > (rep?.pct ?? -1)) rep = { pct: a.pct, candidate: match.candidate };
-      }
-      if (dem === null || rep === null) {
-        unmapped++;
-        continue;
+      // Candidate lookup, per race.
+      const candidateRows = (
+        await env.DB.prepare(
+          "SELECT id, race_id, name, party, nominee FROM candidates",
+        ).all<RaceCandidate & { race_id: string }>()
+      ).results;
+      const byRace = new Map<string, RaceCandidate[]>();
+      for (const c of candidateRows) {
+        const list = byRace.get(c.race_id) ?? [];
+        list.push(c);
+        byRace.set(c.race_id, list);
       }
 
-      // Once a party's nominee is called, hypothetical matchups testing a
-      // primary loser stop being evidence about the general election.
-      if (testsPrimaryLoser(dem.candidate, candidates, "D") ||
-          testsPrimaryLoser(rep.candidate, candidates, "R")) {
-        loserMatchups++;
-        continue;
-      }
+      const polls: Poll[] = [];
+      let unmapped = 0;
+      let loserMatchups = 0;
+      for (const p of raw) {
+        // "2026 Georgia" = general; "2026 Texas Democratic" = primary — skip primaries.
+        const m = /^(\d{4}) (.+?)( Democratic| Republican)?$/.exec(p.subject);
+        if (!m || m[1] !== env.CYCLE || m[3]) continue;
+        const abbr = STATE_ABBR[m[2]!];
+        if (!abbr) continue;
+        const raceId = raceIdForState(abbr);
 
-      polls.push({
-        raceId,
-        pollster: p.pollster,
-        startDate: p.start_date,
-        endDate: p.end_date,
-        sampleSize: p.sample_size,
-        population: normPopulation(p.population),
-        demPct: dem.pct,
-        repPct: rep.pct,
-        demCandidateId: dem.candidate?.id ?? null,
-        repCandidateId: rep.candidate?.id ?? null,
-        sponsorParty: normPartisan(p.partisan),
-        sourceUrl: p.url ?? undefined,
-      });
-    }
-    if (unmapped > 0) {
-      console.warn(`votehub-senate: ${unmapped} polls skipped (candidates not yet in FEC table)`);
-    }
-    if (loserMatchups > 0) {
-      console.warn(`votehub-senate: ${loserMatchups} polls skipped (matchups testing primary losers)`);
-    }
-    return polls;
-  },
-};
+        const candidates = byRace.get(raceId) ?? [];
+        let dem: { pct: number; candidate: RaceCandidate | null } | null = null;
+        let rep: { pct: number; candidate: RaceCandidate | null } | null = null;
+        for (const a of p.answers) {
+          const match = matchCandidate(a.choice, candidates);
+          if (!match) continue;
+          if (match.party === "D" && a.pct > (dem?.pct ?? -1)) dem = { pct: a.pct, candidate: match.candidate };
+          if (match.party === "R" && a.pct > (rep?.pct ?? -1)) rep = { pct: a.pct, candidate: match.candidate };
+        }
+        if (dem === null || rep === null) {
+          unmapped++;
+          continue;
+        }
+
+        // Once a party's nominee is called, hypothetical matchups testing a
+        // primary loser stop being evidence about the general election.
+        if (testsPrimaryLoser(dem.candidate, candidates, "D") ||
+            testsPrimaryLoser(rep.candidate, candidates, "R")) {
+          loserMatchups++;
+          continue;
+        }
+
+        polls.push({
+          raceId,
+          pollster: p.pollster,
+          startDate: p.start_date,
+          endDate: p.end_date,
+          sampleSize: p.sample_size,
+          population: normPopulation(p.population),
+          demPct: dem.pct,
+          repPct: rep.pct,
+          demCandidateId: dem.candidate?.id ?? null,
+          repCandidateId: rep.candidate?.id ?? null,
+          sponsorParty: normPartisan(p.partisan),
+          sourceUrl: p.url ?? undefined,
+        });
+      }
+      if (unmapped > 0) {
+        console.warn(`${name}: ${unmapped} polls skipped (candidates not yet mapped)`);
+      }
+      if (loserMatchups > 0) {
+        console.warn(`${name}: ${loserMatchups} polls skipped (matchups testing primary losers)`);
+      }
+      return polls;
+    },
+  };
+}
+
+const votehubSenate = votehubSource("votehub-senate", "us-senator", (abbr) =>
+  SPECIALS.has(abbr) ? `sen-2026-${abbr}-special` : `sen-2026-${abbr}`,
+);
+
+const votehubGovernor = votehubSource("votehub-governor", "governor", (abbr) => `gov-2026-${abbr}`);
 
 const SB_ARTICLE =
   "https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls";
@@ -237,4 +250,8 @@ function parseCsv(text: string): string[][] {
     });
 }
 
-export const POLL_SOURCES: PollSource[] = [silverBulletinGenericBallot, votehubSenate];
+export const POLL_SOURCES: PollSource[] = [
+  silverBulletinGenericBallot,
+  votehubSenate,
+  votehubGovernor,
+];

@@ -22,6 +22,7 @@ import { cooldownHours, HttpError, isDue, markRan, startCooldown } from "./throt
  *  (+ ~1 article-page hit/day for link resolution), FEC ~10, FRED ~3. */
 const CADENCE_HOURS: Record<string, number> = {
   "votehub-senate": 2,
+  "votehub-governor": 2,
   "silver-bulletin-gb": 6,
   "ballotpedia-nominees": 12,
   fec: 24,
@@ -40,7 +41,7 @@ export interface ScrapeReport {
   nominees: SourceResult | (NomineeReport & { fetched?: number; inserted?: number });
 }
 
-export async function scrapeAll(env: Env): Promise<ScrapeReport> {
+export async function scrapeAll(env: Env, force = false): Promise<ScrapeReport> {
   const now = new Date();
   const report: ScrapeReport = {
     polls: {},
@@ -50,7 +51,7 @@ export async function scrapeAll(env: Env): Promise<ScrapeReport> {
   };
 
   // FEC first: the VoteHub source needs candidates to map names -> parties.
-  report.fec = await runGated(env, "fec", now, async () => {
+  report.fec = await runGated(env, "fec", now, force, async () => {
     const newCandidates = await bootstrapCandidates(env);
     const updated = await scrapeFec(env);
     return { fetched: newCandidates, inserted: updated };
@@ -58,21 +59,21 @@ export async function scrapeAll(env: Env): Promise<ScrapeReport> {
 
   // Nominee watch after FEC (matching needs the candidates table), before
   // polls (so a fresh call filters this run's ingestion too).
-  const nomineeResult = await runGated(env, "ballotpedia-nominees", now, async () => {
+  const nomineeResult = await runGated(env, "ballotpedia-nominees", now, force, async () => {
     const r = await watchNominees(env);
     return { fetched: r.checked, inserted: r.called.length, ...r };
   });
   report.nominees = nomineeResult;
 
   for (const source of POLL_SOURCES) {
-    report.polls[source.name] = await runGated(env, source.name, now, async () => {
+    report.polls[source.name] = await runGated(env, source.name, now, force, async () => {
       const polls = await source.fetch(env);
       const inserted = await ingestPolls(env, polls);
       return { fetched: polls.length, inserted };
     });
   }
 
-  report.fred = await runGated(env, "fred", now, async () => {
+  report.fred = await runGated(env, "fred", now, force, async () => {
     const stored = await scrapeFred(env);
     return { fetched: stored, inserted: stored };
   });
@@ -84,10 +85,13 @@ async function runGated(
   env: Env,
   name: string,
   now: Date,
+  force: boolean,
   fn: () => Promise<{ fetched: number; inserted: number }>,
 ): Promise<SourceResult> {
-  const due = await isDue(env.FORECAST_CACHE, name, CADENCE_HOURS[name] ?? 2, now);
-  if (due !== "due") return { skipped: due };
+  if (!force) {
+    const due = await isDue(env.FORECAST_CACHE, name, CADENCE_HOURS[name] ?? 2, now);
+    if (due !== "due") return { skipped: due };
+  }
 
   try {
     const result = await fn();

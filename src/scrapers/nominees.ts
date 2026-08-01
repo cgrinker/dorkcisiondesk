@@ -45,24 +45,26 @@ const PRIMARY_DATES: Record<string, string> = {
 };
 
 /** Bound requests per run; leftovers are picked up next cycle. */
-const MAX_PAGES_PER_RUN = 12;
+const MAX_PAGES_PER_RUN = 15;
 
 export interface NomineeReport {
   checked: number;
   called: string[];
   unmatched: string[];
+  harvested: number;
+  errors: string[];
 }
 
 export async function watchNominees(env: Env): Promise<NomineeReport> {
-  const report: NomineeReport = { checked: 0, called: [], unmatched: [] };
+  const report: NomineeReport = { checked: 0, called: [], unmatched: [], harvested: 0, errors: [] };
   const today = new Date().toISOString().slice(0, 10);
 
   const races = (
     await env.DB.prepare(
-      "SELECT id, state FROM races WHERE type = 'senate' AND cycle = ?",
+      "SELECT id, state, type FROM races WHERE type IN ('senate','governor') AND cycle = ?",
     )
       .bind(Number(env.CYCLE))
-      .all<{ id: string; state: string }>()
+      .all<{ id: string; state: string; type: string }>()
   ).results;
 
   const candidateRows = (
@@ -77,19 +79,74 @@ export async function watchNominees(env: Env): Promise<NomineeReport> {
     byRace.set(c.race_id, list);
   }
 
-  for (const race of races) {
-    if (report.checked >= MAX_PAGES_PER_RUN) break;
-    const primaryDate = PRIMARY_DATES[race.state];
-    if (primaryDate && today < primaryDate) continue;
-
+  // Some races stay pending for weeks (runoff scheduled, Ballotpedia not yet
+  // updated), and refetching them every run would starve the rest of the
+  // queue under MAX_PAGES_PER_RUN. Harvest-needed races go first (they gate
+  // poll mapping); everything else is shuffled so all pending races cycle
+  // through eventually.
+  const eligible = races.filter((race) => {
     const candidates = byRace.get(race.id) ?? [];
+    // Governors have no FEC feed, so their candidates come from Ballotpedia
+    // too — which justifies one pre-primary visit for an empty race (poll
+    // matchup mapping needs names before the primary resolves).
+    const needsHarvest = race.type === "governor" && candidates.length === 0;
+    const primaryDate = PRIMARY_DATES[race.state];
+    if (primaryDate && today < primaryDate && !needsHarvest) return false;
+    return (["D", "R"] as const).some(
+      (p) => !candidates.some((c) => c.party === p && c.nominee),
+    );
+  });
+  const harvestNeeded = (r: { id: string; type: string }) =>
+    r.type === "governor" && (byRace.get(r.id) ?? []).length === 0;
+  eligible.sort(
+    (a, b) => Number(harvestNeeded(b)) - Number(harvestNeeded(a)) || Math.random() - 0.5,
+  );
+
+  for (const race of eligible) {
+    if (report.checked >= MAX_PAGES_PER_RUN) break;
+    let candidates = byRace.get(race.id) ?? [];
     const missing = (["D", "R"] as const).filter(
       (p) => !candidates.some((c) => c.party === p && c.nominee),
     );
-    if (missing.length === 0) continue;
 
     report.checked++;
-    const winners = parseNominees(await fetchRacePage(race));
+    let html: string;
+    try {
+      html = await fetchRacePage(race);
+    } catch (e) {
+      // Rate-limiting must propagate (cools down the whole source); a bad
+      // page title or transient miss shouldn't abort the rest of the sweep.
+      if (e instanceof HttpError && (e.status === 429 || e.status === 403)) throw e;
+      report.errors.push(e instanceof Error ? e.message : String(e));
+      continue;
+    }
+
+    if (race.type === "governor") {
+      const found = parseCandidates(html);
+      const fresh = found.filter(
+        (f) => !candidates.some((c) => c.name.toLowerCase() === f.name.toLowerCase()),
+      );
+      if (fresh.length > 0) {
+        await env.DB.batch(
+          fresh.map((f) =>
+            env.DB.prepare(
+              "INSERT OR IGNORE INTO candidates (race_id, name, party) VALUES (?, ?, ?)",
+            ).bind(race.id, f.name, f.party),
+          ),
+        );
+        report.harvested += fresh.length;
+        // Reload so nominee matching below sees the new rows (with ids).
+        candidates = (
+          await env.DB.prepare(
+            "SELECT id, name, party, nominee FROM candidates WHERE race_id = ?",
+          )
+            .bind(race.id)
+            .all<RaceCandidate>()
+        ).results;
+      }
+    }
+
+    const winners = parseNominees(html);
     for (const party of missing) {
       const winnerName = winners[party];
       if (!winnerName) continue;
@@ -110,13 +167,72 @@ export async function watchNominees(env: Env): Promise<NomineeReport> {
   return report;
 }
 
-async function fetchRacePage(race: { id: string; state: string }): Promise<string> {
+async function fetchRacePage(race: { id: string; state: string; type: string }): Promise<string> {
   const name = STATE_NAME[race.state]?.replace(/ /g, "_");
-  const kind = race.id.endsWith("-special") ? "special_election" : "election";
-  const url = `https://ballotpedia.org/United_States_Senate_${kind}_in_${name},_2026`;
+  // Alaska elects governor + lt. governor as a ticket; Ballotpedia's title
+  // reflects that.
+  const govKind =
+    race.state === "AK" ? "gubernatorial_and_lieutenant_gubernatorial" : "gubernatorial";
+  const url =
+    race.type === "governor"
+      ? `https://ballotpedia.org/${name}_${govKind}_election,_2026`
+      : `https://ballotpedia.org/United_States_Senate_${race.id.endsWith("-special") ? "special_election" : "election"}_in_${name},_2026`;
   const res = await fetch(url, { headers: { "user-agent": BROWSER_UA } });
   if (!res.ok) throw new HttpError(res.status, `ballotpedia ${res.status} for ${race.id}`);
-  return res.text();
+  const html = await res.text();
+  // Ballotpedia's bot challenge answers 202 (or 200 with a stub body) under
+  // burst load; a real race page is hundreds of KB. Don't parse a challenge
+  // page as "no candidates".
+  if (res.status === 202 || html.length < 20_000) {
+    throw new HttpError(429, `ballotpedia challenge page for ${race.id}`);
+  }
+  return html;
+}
+
+/**
+ * Extract this cycle's candidates (name + party) from a Ballotpedia race
+ * page. Two signals, current cycle only: general-election rows carry a
+ * "(D)"/"(R)" marker after the name; party-primary blocks imply the party of
+ * everyone in them. Write-ins are skipped.
+ */
+export function parseCandidates(html: string): { name: string; party: string }[] {
+  const blocks = html.split('class="votebox"');
+  const out = new Map<string, string>();
+  let generalsSeen = 0;
+
+  for (const block of blocks.slice(1)) {
+    const heading = /votebox-header-election-type[^>]*>([^<]+)/.exec(block)?.[1]?.trim() ?? "";
+    // Winner names may be wrapped in <b><u> — tolerate inline formatting
+    // tags between the cell and the anchor, and after the anchor closes.
+    const rows = [
+      ...block.matchAll(
+        /votebox-results-cell--text"[^>]*>(?:\s|<\/?[bui]>)*<a [^>]*>([^<]+)<\/a>(?:\s|<\/?[bui]>)*((?:&#160;|[^<])*)/g,
+      ),
+    ].map((m) => ({ name: m[1]!.trim(), trailer: m[2]!.replace(/&#160;/g, " ").trim() }));
+
+    if (/^General election/i.test(heading)) {
+      generalsSeen++;
+      if (generalsSeen >= 2) break; // older cycles below
+      for (const r of rows) {
+        if (/write-?in/i.test(r.trailer)) continue;
+        const party = /^\(([A-Z])\)/.exec(r.trailer)?.[1];
+        if (party && !out.has(r.name.toLowerCase())) out.set(r.name.toLowerCase(), `${r.name}|${party}`);
+      }
+      continue;
+    }
+
+    const party = /^Democratic primary/i.test(heading) ? "D" : /^Republican primary/i.test(heading) ? "R" : null;
+    if (!party) continue;
+    for (const r of rows) {
+      if (/write-?in/i.test(r.trailer)) continue;
+      if (!out.has(r.name.toLowerCase())) out.set(r.name.toLowerCase(), `${r.name}|${party}`);
+    }
+  }
+
+  return [...out.values()].map((v) => {
+    const [name, party] = v.split("|");
+    return { name: name!, party: party! };
+  });
 }
 
 /** Extract this cycle's called D/R nominees from a Ballotpedia race page. */
@@ -138,7 +254,7 @@ export function parseNominees(html: string): { D?: string; R?: string } {
 
     const winners = [
       ...block.matchAll(
-        /results_row\s+winner[\s\S]*?votebox-results-cell--text"[^>]*>\s*<a [^>]*>([^<]+)/g,
+        /results_row\s+winner[\s\S]*?votebox-results-cell--text"[^>]*>(?:\s|<\/?[bui]>)*<a [^>]*>([^<]+)/g,
       ),
     ].map((m) => m[1]!.trim());
 
