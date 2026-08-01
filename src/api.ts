@@ -163,7 +163,8 @@ export const DOCS = {
   api: "elections forecast API",
   election_day: "2026-11-03",
   endpoints: {
-    "GET /": "Latest full forecast: senate/house chamber summaries (competitive House districts only), governor races, generic ballot, stale flag, credits.",
+    "GET /": "Interactive dashboard (HTML).",
+    "GET /summary": "Latest full forecast: senate/house chamber summaries (competitive House districts only), governor races, generic ballot, stale flag, credits.",
     "GET /races": "Latest per-race forecasts joined with race metadata and called nominees. Filters: ?type=senate|governor|house, ?state=XX, ?competitive=1 (5-95% only), ?limit=N.",
     "GET /races/{id}": "One race in full: metadata, candidate slate (nominee/incumbent/fundraising), latest forecast, forecast history across runs, recent polls. Ids look like sen-2026-GA, gov-2026-AZ, house-2026-TX-23.",
     "GET /polls": "Ingested polls, newest first. Filters: ?race=id, ?limit=N (<=500), ?offset=N.",

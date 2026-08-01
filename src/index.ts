@@ -20,7 +20,8 @@ export default {
     }
 
     switch (url.pathname) {
-      case "/": {
+      // "/" serves the dashboard (static asset); the JSON topline lives here.
+      case "/summary": {
         const cached = await env.FORECAST_CACHE.get("latest");
         if (!cached) return json({ error: "no forecast yet — run POST /admin/run" }, 404);
         const summary = JSON.parse(cached);

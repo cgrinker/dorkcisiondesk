@@ -5,6 +5,10 @@
   "compatibility_date": "2026-07-01",
   "observability": { "enabled": true },
 
+  // React dashboard (web/ -> vite build). Paths matching built files are
+  // served as static assets; everything else (the JSON API) hits the Worker.
+  "assets": { "directory": "./web/dist" },
+
   // Scrape polls every 2 hours; rebuild the forecast 15 min after each scrape window.
   "triggers": {
     "crons": [

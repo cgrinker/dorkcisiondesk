@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build:web
 
   deploy:
     needs: test
@@ -29,6 +30,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build:web
       # Worker secrets (ADMIN_TOKEN, FEC/FRED keys) live in Cloudflare and
       # are untouched by deploys; this only needs an API token that can edit
       # Workers. Create one at dash.cloudflare.com/profile/api-tokens with
