@@ -13,10 +13,11 @@ import { simulate, chamberSummary, type SimRace } from "./simulate";
 // Monte Carlo se on a 50% win probability is ±0.5 pts (reported per race).
 const N_SIMS = 10_000;
 
-// 2026 Senate control baseline: Dem-caucus seats NOT up this cycle.
-// TODO(seed): verify against the final 2026 map incl. specials before trusting toplines.
-const SENATE_BASELINE_DEM = 30;
-const SENATE_CONTROL = 51; // assume no tie-break; adjust if modeling VP party
+// 2026 Senate control baseline: Dem-CAUCUS seats NOT up this cycle.
+// Current chamber 53R / 45D / 2I (King, Sanders — both caucus D) = 47
+// Dem-caucus; 13 of the 35 seats up are Dem-held; 47 - 13 = 34.
+const SENATE_BASELINE_DEM = 34;
+const SENATE_CONTROL = 51; // VP (R) breaks ties, so Dems need 51 outright party
 
 export async function runForecast(env: Env): Promise<RunSummary> {
   const now = new Date();
