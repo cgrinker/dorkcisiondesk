@@ -201,6 +201,15 @@ describe("ballotpedia nominee parsing", () => {
     expect(parseCandidates(html)).toEqual([{ name: "Katie Hobbs", party: "D" }]);
   });
 
+  it("general-election slate overrides the primary record (post-primary withdrawal)", () => {
+    const html =
+      `class="votebox"><div class="votebox-header-election-type">General election for U.S. Senate Maine</div>` +
+      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Troy Dale Jackson</a> (D)  </td></tr>` +
+      `class="votebox"><div class="votebox-header-election-type">Democratic primary for U.S. Senate Maine</div>` +
+      `<p>The following candidates advanced from the Democratic ranked-choice voting primary: <a href="#">Graham Platner</a> in round 1.</p>`;
+    expect(parseNominees(html)).toEqual({ D: "Troy Dale Jackson" });
+  });
+
   it("reads ranked-choice primary winners from the advanced-from prose", () => {
     const rcv =
       `class="votebox"><div class="votebox-header-election-type">Democratic primary for U.S. Senate Maine</div>` +

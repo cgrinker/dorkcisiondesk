@@ -235,11 +235,21 @@ export function parseCandidates(html: string): { name: string; party: string }[]
   });
 }
 
-/** Extract this cycle's called D/R nominees from a Ballotpedia race page. */
+/**
+ * Extract this cycle's called D/R nominees from a Ballotpedia race page.
+ *
+ * The current cycle's General-election block is the source of truth for the
+ * CURRENT slate: a primary winner who later withdraws (Platner in ME 2026)
+ * is replaced there, while the primary block keeps recording the historical
+ * result. So a lone (D)/(R) candidate in the general block wins outright;
+ * primary/runoff results are the fallback when the general block hasn't
+ * been populated for that party yet.
+ */
 export function parseNominees(html: string): { D?: string; R?: string } {
   const blocks = html.split('class="votebox"');
   const result: { D?: string; R?: string } = {};
   const seen = { primary: {} as Record<string, string[]>, runoff: {} as Record<string, string[]> };
+  const general: Record<string, string[]> = { D: [], R: [] };
 
   let generalsSeen = 0;
   for (const block of blocks.slice(1)) {
@@ -247,6 +257,17 @@ export function parseNominees(html: string): { D?: string; R?: string } {
     if (/^General election/i.test(heading)) {
       generalsSeen++;
       if (generalsSeen >= 2) break; // older cycles start here
+      const rows = [
+        ...block.matchAll(
+          /votebox-results-cell--text"[^>]*>(?:\s|<\/?[bui]>)*<a [^>]*>([^<]+)<\/a>(?:\s|<\/?[bui]>)*((?:&#160;|[^<])*)/g,
+        ),
+      ];
+      for (const m of rows) {
+        const trailer = m[2]!.replace(/&#160;/g, " ").trim();
+        if (/write-?in/i.test(trailer)) continue;
+        const party = /^\((D|R)\)/.exec(trailer)?.[1];
+        if (party) general[party]!.push(m[1]!.trim());
+      }
       continue;
     }
     const party = /^Democratic/i.test(heading) ? "D" : /^Republican/i.test(heading) ? "R" : null;
@@ -276,6 +297,11 @@ export function parseNominees(html: string): { D?: string; R?: string } {
   }
 
   for (const party of ["D", "R"] as const) {
+    // Current general slate beats the primary record (withdrawals/replacements).
+    if (general[party]!.length === 1) {
+      result[party] = general[party]![0];
+      continue;
+    }
     const runoff = seen.runoff[party];
     const primary = seen.primary[party];
     // Runoff is decisive when present; a plain primary with 2+ winners just
