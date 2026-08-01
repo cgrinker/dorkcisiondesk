@@ -5,3 +5,4 @@ dist/
 *.log
 .admin-token.local
 web/dist/
+data/scrape.json
