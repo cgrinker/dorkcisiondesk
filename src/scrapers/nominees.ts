@@ -252,11 +252,24 @@ export function parseNominees(html: string): { D?: string; R?: string } {
     const party = /^Democratic/i.test(heading) ? "D" : /^Republican/i.test(heading) ? "R" : null;
     if (!party || !/primary/i.test(heading)) continue;
 
-    const winners = [
+    let winners = [
       ...block.matchAll(
         /results_row\s+winner[\s\S]*?votebox-results-cell--text"[^>]*>(?:\s|<\/?[bui]>)*<a [^>]*>([^<]+)/g,
       ),
     ].map((m) => m[1]!.trim());
+
+    // Ranked-choice primaries (ME; AK's top-four) render prose instead of
+    // winner rows: "...advanced from the ... primary ...: Name in round N".
+    // Multiple advancers (top-four) stay ambiguous and produce no call.
+    if (winners.length === 0) {
+      const text = block.slice(0, 2000).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const advanced = /advanced from the [^:]{0,160}?:\s*(.{0,300})/.exec(text)?.[1];
+      if (advanced) {
+        winners = [...advanced.matchAll(/([A-Z][\w.'À-ſ -]+?) in round \d/g)].map((m) =>
+          m[1]!.trim(),
+        );
+      }
+    }
 
     const kind = /runoff/i.test(heading) ? "runoff" : "primary";
     seen[kind][party] = winners;

@@ -201,6 +201,21 @@ describe("ballotpedia nominee parsing", () => {
     expect(parseCandidates(html)).toEqual([{ name: "Katie Hobbs", party: "D" }]);
   });
 
+  it("reads ranked-choice primary winners from the advanced-from prose", () => {
+    const rcv =
+      `class="votebox"><div class="votebox-header-election-type">Democratic primary for U.S. Senate Maine</div>` +
+      `<p>The following candidates advanced from the Democratic ranked-choice voting primary for U.S. Senate Maine on June 9, 2026: ` +
+      `<a href="#">Graham Platner</a> in round 1.</p><table></table>`;
+    expect(parseNominees(rcv)).toEqual({ D: "Graham Platner" });
+
+    // Top-four (AK): several advancers -> ambiguous, no call.
+    const topFour =
+      `class="votebox"><div class="votebox-header-election-type">Republican primary for U.S. Senate Alaska</div>` +
+      `<p>The following candidates advanced from the ranked-choice voting primary: ` +
+      `<a href="#">Al Alpha</a> in round 1, <a href="#">Bo Bravo</a> in round 1.</p>`;
+    expect(parseNominees(topFour)).toEqual({});
+  });
+
   it("treats two primary winners as advanced-to-runoff, runoff as decisive", () => {
     const pending =
       block("Republican primary for U.S. Senate Texas", [
