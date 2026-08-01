@@ -16,10 +16,11 @@ frozen at Feb 2025 (still useful as a historical archive, CC-BY-4.0).
 | **Ballotpedia** | Primary results → automatic nominee calls | HTML race pages (`United_States_Senate_[special_]election_in_{State},_2026`); no free API; serves browser UAs only; reuse requires attribution | wired: `ballotpedia-nominees` watcher (12h cadence, ≤12 pages/run, only races with missing nominees whose primary date has passed). Winner rows carry a `results_row winner` class; runoff blocks are decisive; 2+ primary winners = runoff pending. Manual `/admin/nominee` overrides it |
 | **FRED API** | UNRATE, CPI YoY, consumer sentiment | free key | wired (needs `FRED_API_KEY`) |
 
+| **Wikipedia** | Redundancy poll feed: per-race polling wikitables | MediaWiki API (`action=parse`), CC-BY-SA, identify with contact UA | wired: `wikipedia-races` source (12h). Matchup tables self-identify via (D)/(R) headers; cross-source dedup vs VoteHub (end date ±1d + pcts within 0.7); polls must map to declared candidates (rejects hypothetical trial heats); pollster "(R)"/"(D)" markers → sponsor adjustment |
+
 ## Available as fallback / next
 
 - **RealClearPolitics JSON** (undocumented): `orig.realclearpolitics.com/poll/race/{id}/polling_data.json` and `www.realclearpolitics.com/epolls/json/{id}_historical.js` (JSONP). ToS gray area — cross-validation only.
-- **Wikipedia**: per-race polling wikitables (`2026 United States Senate election in {State}`), race/candidate metadata, Cook PVI values, forecaster ratings tables. MediaWiki API, CC-BY-SA. Best source for **governor** candidates (FEC is federal-only).
 - **MIT Election Lab (MEDSL)**: historical results for backtesting — Senate 1976–2024 (`doi:10.7910/DVN/PEJ5QU`), House (`doi:10.7910/DVN/IG0UN2`), President (`doi:10.7910/DVN/42MVDX`).
 - **VoteHub approval/generic**: `poll_type=approval&subject=Donald Trump` — fallback if the SB sheet disappears.
 - **FiftyPlusOne** (`fiftyplusone.news`): 538-style averages, CSV/API is paid ($100/mo) — option if free sources degrade.
