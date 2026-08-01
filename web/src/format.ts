@@ -1,6 +1,10 @@
 import type { RaceRow } from "./api";
 
 export const fmtPct = (p: number) => `${(100 * p).toFixed(0)}%`;
+
+/** Winner-side framing: "85% R" / "61% D" instead of always-Dem probability. */
+export const fmtLeaderProb = (pDem: number) =>
+  pDem >= 0.5 ? `${fmtPct(pDem)} D` : `${fmtPct(1 - pDem)} R`;
 export const fmtMargin = (m: number) => (m >= 0 ? `D+${m.toFixed(1)}` : `R+${(-m).toFixed(1)}`);
 
 /** Turn "STEVENS, HALEY" / "Haley Stevens" into "Stevens". */

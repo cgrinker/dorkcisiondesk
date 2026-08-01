@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchHistory, fetchRaces, fetchSummary, type HistoryRow, type RaceRow, type Summary } from "./api";
 import { MarginCI, SeatHistogram, TrendChart } from "./charts";
 import { DistrictTileMap, MapLegend, StateTileMap } from "./tilemap";
-import { fmtMargin, fmtPct, matchup, raceLabel } from "./format";
+import { fmtLeaderProb, fmtMargin, fmtPct, matchup, raceLabel } from "./format";
 
 export default function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -97,7 +97,7 @@ export default function App() {
           <thead>
             <tr>
               <th>Race</th>
-              <th>P(Dem)</th>
+              <th>Win prob</th>
               <th>Margin</th>
               <th>80% interval</th>
               <th>Polls</th>
@@ -112,7 +112,7 @@ export default function App() {
                 </td>
                 <td>
                   <span className="prob" style={{ color: r.dem_win_prob >= 0.5 ? "var(--dem)" : "var(--rep)" }}>
-                    {fmtPct(r.dem_win_prob)}
+                    {fmtLeaderProb(r.dem_win_prob)}
                   </span>
                 </td>
                 <td>{fmtMargin(r.dem_margin_mean)}</td>

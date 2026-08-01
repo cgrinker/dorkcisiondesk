@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { RaceRow } from "./api";
 import { useTooltip } from "./charts";
-import { fmtMargin, matchup, raceLabel } from "./format";
+import { fmtLeaderProb, fmtMargin, matchup, raceLabel } from "./format";
 
 /** Standard state tile-grid positions (col, row) — every state equal weight. */
 const GRID: Record<string, [number, number]> = {
@@ -46,8 +46,8 @@ function raceTip(r: RaceRow): ReactNode {
       <br />
       {matchup(r)}
       <br />
-      <span className="t-label">P(Dem) </span>
-      {(100 * r.dem_win_prob).toFixed(0)}%
+      <span className="t-label">win prob </span>
+      {fmtLeaderProb(r.dem_win_prob)}
       <span className="t-label"> · margin </span>
       {fmtMargin(r.dem_margin_mean)}
       <span className="t-label"> [{r.dem_margin_p10}, {r.dem_margin_p90}]</span>
@@ -102,7 +102,7 @@ export function StateTileMap({ races }: { races: RaceRow[] }) {
                 {state}
               </text>
               <text x={x + CELL / 2} y={y + CELL / 2 + 13} textAnchor="middle" fontSize={10} fill={cls.ink} opacity={0.85}>
-                {(100 * race.dem_win_prob).toFixed(0)}%
+                {fmtLeaderProb(race.dem_win_prob)}
               </text>
             </g>
           );
