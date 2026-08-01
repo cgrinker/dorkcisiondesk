@@ -61,7 +61,7 @@ function normPartisan(p: string | null): "D" | "R" | null {
 function votehubSource(
   name: string,
   pollType: string,
-  raceIdForState: (abbr: string) => string,
+  subjectToRaceId: (subjectBody: string) => string | null,
 ): PollSource {
   return {
     name,
@@ -93,9 +93,8 @@ function votehubSource(
         // "2026 Georgia" = general; "2026 Texas Democratic" = primary — skip primaries.
         const m = /^(\d{4}) (.+?)( Democratic| Republican)?$/.exec(p.subject);
         if (!m || m[1] !== env.CYCLE || m[3]) continue;
-        const abbr = STATE_ABBR[m[2]!];
-        if (!abbr) continue;
-        const raceId = raceIdForState(abbr);
+        const raceId = subjectToRaceId(m[2]!);
+        if (!raceId) continue;
 
         const candidates = byRace.get(raceId) ?? [];
         let dem: { pct: number; candidate: RaceCandidate | null } | null = null;
@@ -145,11 +144,30 @@ function votehubSource(
   };
 }
 
-const votehubSenate = votehubSource("votehub-senate", "us-senator", (abbr) =>
-  SPECIALS.has(abbr) ? `sen-2026-${abbr}-special` : `sen-2026-${abbr}`,
+const stateSubject = (raceIdForAbbr: (abbr: string) => string) => (body: string) => {
+  const abbr = STATE_ABBR[body];
+  return abbr ? raceIdForAbbr(abbr) : null;
+};
+
+const votehubSenate = votehubSource(
+  "votehub-senate",
+  "us-senator",
+  stateSubject((abbr) => (SPECIALS.has(abbr) ? `sen-2026-${abbr}-special` : `sen-2026-${abbr}`)),
 );
 
-const votehubGovernor = votehubSource("votehub-governor", "governor", (abbr) => `gov-2026-${abbr}`);
+const votehubGovernor = votehubSource(
+  "votehub-governor",
+  "governor",
+  stateSubject((abbr) => `gov-2026-${abbr}`),
+);
+
+// House subjects are district codes: "2026 TX-23", at-large as "AK-01".
+const votehubHouse = votehubSource("votehub-house", "us-representative", (body) => {
+  const m = /^([A-Z]{2})-(\d{2}|AL)$/.exec(body);
+  if (!m) return null;
+  const district = m[2] === "AL" ? 1 : parseInt(m[2]!);
+  return `house-2026-${m[1]}-${String(district).padStart(2, "0")}`;
+});
 
 const SB_ARTICLE =
   "https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls";
@@ -259,5 +277,6 @@ export const POLL_SOURCES: PollSource[] = [
   silverBulletinGenericBallot,
   votehubSenate,
   votehubGovernor,
+  votehubHouse,
   wikipediaRaces,
 ];

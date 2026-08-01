@@ -56,23 +56,25 @@ export async function scrapeFec(env: Env): Promise<number> {
   if (!env.FEC_API_KEY) return 0;
 
   const totals = new Map<string, number>();
-  for (let page = 1; page <= 20; page++) {
-    const url =
-      `https://api.open.fec.gov/v1/candidates/totals/?api_key=${env.FEC_API_KEY}` +
-      `&election_year=${env.CYCLE}&office=S&per_page=100&page=${page}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 429 || res.status === 403) throw new HttpError(res.status, `fec totals ${res.status}`);
-      break;
+  for (const office of ["S", "H"]) {
+    for (let page = 1; page <= 40; page++) {
+      const url =
+        `https://api.open.fec.gov/v1/candidates/totals/?api_key=${env.FEC_API_KEY}` +
+        `&election_year=${env.CYCLE}&office=${office}&per_page=100&page=${page}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        if (res.status === 429 || res.status === 403) throw new HttpError(res.status, `fec totals ${res.status}`);
+        break;
+      }
+      const data = (await res.json()) as {
+        results: { candidate_id: string; receipts?: number }[];
+        pagination: { pages: number };
+      };
+      for (const r of data.results) {
+        if (r.receipts !== undefined) totals.set(r.candidate_id, r.receipts);
+      }
+      if (page >= data.pagination.pages) break;
     }
-    const data = (await res.json()) as {
-      results: { candidate_id: string; receipts?: number }[];
-      pagination: { pages: number };
-    };
-    for (const r of data.results) {
-      if (r.receipts !== undefined) totals.set(r.candidate_id, r.receipts);
-    }
-    if (page >= data.pagination.pages) break;
   }
   if (totals.size === 0) return 0;
 

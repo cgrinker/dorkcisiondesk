@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS forecasts (
   race_id TEXT NOT NULL REFERENCES races(id),
   dem_margin_mean REAL NOT NULL,  -- expected Dem margin, points
   dem_margin_sd REAL NOT NULL,
+  -- 80% interval on the margin from the simulation distribution.
+  dem_margin_p10 REAL,
+  dem_margin_p90 REAL,
   dem_win_prob REAL NOT NULL,
   poll_weight REAL NOT NULL,      -- how much of the blend came from polls vs fundamentals
   n_polls INTEGER NOT NULL,

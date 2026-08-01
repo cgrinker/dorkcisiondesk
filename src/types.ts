@@ -57,7 +57,12 @@ export interface RaceForecast {
   raceId: string;
   demMarginMean: number;
   demMarginSd: number;
+  /** 80% interval on the Dem margin, from the simulation distribution. */
+  demMarginP10: number;
+  demMarginP90: number;
   demWinProb: number;
+  /** Monte Carlo standard error of demWinProb (sampling noise, not outcome uncertainty). */
+  demWinProbMcSe: number;
   pollWeight: number;
   nPolls: number;
 }
@@ -69,6 +74,7 @@ export interface RunSummary {
   daysToElection: number;
   genericBallot: number | null;
   senate: ChamberSummary;
+  house: ChamberSummary;
   governors: { races: RaceForecast[] };
 }
 
@@ -79,4 +85,7 @@ export interface ChamberSummary {
   /** Histogram of Dem seats won among the modeled races. */
   seatDistribution: Record<number, number>;
   meanSeats: number;
+  /** 80% interval on Dem seats, from the simulation distribution. */
+  seatsP10: number;
+  seatsP90: number;
 }

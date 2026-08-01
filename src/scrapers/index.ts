@@ -23,6 +23,7 @@ import { cooldownHours, HttpError, isDue, markRan, startCooldown } from "./throt
 const CADENCE_HOURS: Record<string, number> = {
   "votehub-senate": 2,
   "votehub-governor": 2,
+  "votehub-house": 6,
   "silver-bulletin-gb": 6,
   "wikipedia-races": 12,
   "ballotpedia-nominees": 12,

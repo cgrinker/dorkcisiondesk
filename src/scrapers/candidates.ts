@@ -15,44 +15,63 @@ interface FecCandidate {
   party: string;
   state: string;
   office: string;
+  district: string | null; // "01".."53", "00" for at-large/statewide
+  incumbent_challenge: string | null; // I / C / O
 }
 
 export async function bootstrapCandidates(env: Env): Promise<number> {
   if (!env.FEC_API_KEY) return 0;
 
-  const raceIds = new Map<string, string>(); // state -> race id
   const races = (
-    await env.DB.prepare("SELECT id, state FROM races WHERE type = 'senate' AND cycle = ?")
+    await env.DB.prepare(
+      "SELECT id, state, district, type FROM races WHERE type IN ('senate','house') AND cycle = ?",
+    )
       .bind(Number(env.CYCLE))
-      .all<{ id: string; state: string }>()
+      .all<{ id: string; state: string; district: number | null; type: string }>()
   ).results;
-  for (const r of races) raceIds.set(r.state, r.id);
+  const senateByState = new Map<string, string>();
+  const houseByDistrict = new Map<string, string>(); // "TX-23" -> race id
+  for (const r of races) {
+    if (r.type === "senate") senateByState.set(r.state, r.id);
+    else houseByDistrict.set(`${r.state}-${r.district}`, r.id);
+  }
 
   let inserted = 0;
-  for (let page = 1; page <= 20; page++) {
-    const url =
-      `https://api.open.fec.gov/v1/candidates/search/?api_key=${env.FEC_API_KEY}` +
-      `&election_year=${env.CYCLE}&office=S&has_raised_funds=true&per_page=100&page=${page}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 429 || res.status === 403) throw new HttpError(res.status, `fec candidates ${res.status}`);
-      console.warn(`fec candidates page ${page}: HTTP ${res.status}`);
-      break;
-    }
-    const data = (await res.json()) as { results: FecCandidate[]; pagination: { pages: number } };
+  for (const office of ["S", "H"] as const) {
+    for (let page = 1; page <= 40; page++) {
+      const url =
+        `https://api.open.fec.gov/v1/candidates/search/?api_key=${env.FEC_API_KEY}` +
+        `&election_year=${env.CYCLE}&office=${office}&has_raised_funds=true&per_page=100&page=${page}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        if (res.status === 429 || res.status === 403) throw new HttpError(res.status, `fec candidates ${res.status}`);
+        console.warn(`fec candidates ${office} page ${page}: HTTP ${res.status}`);
+        break;
+      }
+      const data = (await res.json()) as { results: FecCandidate[]; pagination: { pages: number } };
 
-    for (const c of data.results) {
-      const raceId = raceIds.get(c.state);
-      if (!raceId) continue;
-      const party = PARTY_MAP[c.party] ?? c.party ?? "?";
-      const result = await env.DB.prepare(
-        `INSERT OR IGNORE INTO candidates (race_id, name, party, fec_id) VALUES (?, ?, ?, ?)`,
-      )
-        .bind(raceId, c.name, party, c.candidate_id)
-        .run();
-      inserted += result.meta.changes ?? 0;
+      const stmts = [];
+      for (const c of data.results) {
+        const raceId =
+          office === "S"
+            ? senateByState.get(c.state)
+            : houseByDistrict.get(`${c.state}-${parseInt(c.district ?? "0") || 1}`);
+        if (!raceId) continue;
+        const party = PARTY_MAP[c.party] ?? c.party ?? "?";
+        stmts.push(
+          env.DB.prepare(
+            `INSERT INTO candidates (race_id, name, party, incumbent, fec_id) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(race_id, name) DO UPDATE SET fec_id = excluded.fec_id
+             WHERE candidates.fec_id IS NULL`,
+          ).bind(raceId, c.name, party, c.incumbent_challenge === "I" ? 1 : 0, c.candidate_id),
+        );
+      }
+      if (stmts.length > 0) {
+        const results = await env.DB.batch(stmts);
+        inserted += results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+      }
+      if (page >= data.pagination.pages) break;
     }
-    if (page >= data.pagination.pages) break;
   }
   return inserted;
 }

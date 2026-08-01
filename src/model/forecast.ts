@@ -9,7 +9,9 @@ import { fundamentalsPrior } from "./fundamentals";
 import { blend } from "./blend";
 import { simulate, chamberSummary, type SimRace } from "./simulate";
 
-const N_SIMS = 20_000;
+// 10k sims over ~500 races stays well inside the Worker CPU budget; the
+// Monte Carlo se on a 50% win probability is ±0.5 pts (reported per race).
+const N_SIMS = 10_000;
 
 // 2026 Senate control baseline: Dem-caucus seats NOT up this cycle.
 // TODO(seed): verify against the final 2026 map incl. specials before trusting toplines.
@@ -95,6 +97,12 @@ export async function runForecast(env: Env): Promise<RunSummary> {
     SENATE_CONTROL,
   );
 
+  // All 435 House seats are modeled, so the baseline is 0 and 218 controls.
+  const house = chamberSummary(simRaces, result, (r) => r.type === "house", 0, 218);
+  // The topline summary carries only competitive districts (5%..95%); every
+  // district is still persisted and served via /races.
+  house.races = house.races.filter((f) => f.demWinProb > 0.05 && f.demWinProb < 0.95);
+
   const summary: RunSummary = {
     runId,
     nSims: N_SIMS,
@@ -102,6 +110,7 @@ export async function runForecast(env: Env): Promise<RunSummary> {
     daysToElection: Math.round(daysToElection),
     genericBallot,
     senate,
+    house,
     governors: { races: result.forecasts.filter((f) => f.raceId.startsWith("gov-")) },
   };
 
@@ -141,9 +150,19 @@ async function persist(
 ): Promise<void> {
   const stmts = forecasts.map((f) =>
     env.DB.prepare(
-      `INSERT INTO forecasts (run_id, race_id, dem_margin_mean, dem_margin_sd, dem_win_prob, poll_weight, n_polls)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(runId, f.raceId, f.demMarginMean, f.demMarginSd, f.demWinProb, f.pollWeight, f.nPolls),
+      `INSERT INTO forecasts (run_id, race_id, dem_margin_mean, dem_margin_sd, dem_margin_p10, dem_margin_p90, dem_win_prob, poll_weight, n_polls)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      runId,
+      f.raceId,
+      f.demMarginMean,
+      f.demMarginSd,
+      f.demMarginP10,
+      f.demMarginP90,
+      f.demWinProb,
+      f.pollWeight,
+      f.nPolls,
+    ),
   );
   stmts.push(
     env.DB.prepare("INSERT INTO runs (id, n_sims, summary_json) VALUES (?, ?, ?)").bind(

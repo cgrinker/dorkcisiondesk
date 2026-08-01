@@ -39,6 +39,20 @@ export interface SimResult {
   demWinsPerSim: Uint8Array[];
 }
 
+/**
+ * Irreducible race-level noise floor, calibrated from Silver Bulletin
+ * rawpolls 1998-2024 (scripts/calibrate-error-model.mjs): statewide races
+ * ~3 pts (late-poll residual ~5.9 minus ~3.5 sampling noise); House
+ * districts are noisier (residual ~7.0) -> 5 pts.
+ */
+function idioFloor(type: Race["type"]): number {
+  return type === "house" ? 5 : 3;
+}
+
+// Margin histogram bins for quantiles: 1-pt bins covering [-150, +150].
+const BIN_OFFSET = 150;
+const N_BINS = 301;
+
 export function simulate(
   simRaces: SimRace[],
   daysToElection: number,
@@ -54,6 +68,9 @@ export function simulate(
   const winCounts = new Float64Array(simRaces.length);
   const marginSums = new Float64Array(simRaces.length);
   const marginSqSums = new Float64Array(simRaces.length);
+  // Per-race margin histogram -> simulation-distribution quantiles without
+  // storing nSims margins per race.
+  const histograms = simRaces.map(() => new Uint32Array(N_BINS));
   const demWinsPerSim: Uint8Array[] = [];
 
   for (let s = 0; s < nSims; s++) {
@@ -64,13 +81,12 @@ export function simulate(
     for (let i = 0; i < simRaces.length; i++) {
       const sr = simRaces[i]!;
       const reg = regErr[regionIndex.get(sr.race.region ?? "national")!]!;
-      // Estimate sd + irreducible race noise. The 3-pt floor is calibrated
-      // from Silver Bulletin rawpolls 1998-2024 (scripts/calibrate-error-model.mjs):
-      // late-poll race-level residual ~5.9 pts, minus ~3.5 pts sampling noise.
-      const idio = studentT(rng, T_DF, sr.blended.sd + 3);
+      const idio = studentT(rng, T_DF, sr.blended.sd + idioFloor(sr.race.type));
       const margin = sr.blended.margin + natErr + reg + idio;
       marginSums[i]! += margin;
       marginSqSums[i]! += margin * margin;
+      const bin = Math.min(N_BINS - 1, Math.max(0, Math.round(margin) + BIN_OFFSET));
+      histograms[i]![bin] = (histograms[i]![bin] ?? 0) + 1;
       if (margin > 0) {
         winCounts[i]!++;
         wins[i] = 1;
@@ -82,17 +98,31 @@ export function simulate(
   const forecasts: RaceForecast[] = simRaces.map((sr, i) => {
     const mean = marginSums[i]! / nSims;
     const variance = Math.max(0, marginSqSums[i]! / nSims - mean * mean);
+    const p = winCounts[i]! / nSims;
     return {
       raceId: sr.race.id,
       demMarginMean: mean,
       demMarginSd: Math.sqrt(variance),
-      demWinProb: winCounts[i]! / nSims,
+      demMarginP10: histogramQuantile(histograms[i]!, nSims, 0.1),
+      demMarginP90: histogramQuantile(histograms[i]!, nSims, 0.9),
+      demWinProb: p,
+      demWinProbMcSe: Math.sqrt((p * (1 - p)) / nSims),
       pollWeight: sr.blended.pollWeight,
       nPolls: sr.nPolls,
     };
   });
 
   return { forecasts, demWinsPerSim };
+}
+
+function histogramQuantile(hist: Uint32Array, total: number, q: number): number {
+  const target = q * total;
+  let cum = 0;
+  for (let b = 0; b < hist.length; b++) {
+    cum += hist[b]!;
+    if (cum >= target) return b - BIN_OFFSET;
+  }
+  return hist.length - 1 - BIN_OFFSET;
 }
 
 /**
@@ -124,10 +154,21 @@ export function chamberSummary(
   }
 
   const n = result.demWinsPerSim.length;
+  const seatQuantile = (q: number) => {
+    const target = q * n;
+    let cum = 0;
+    for (const seats of Object.keys(dist).map(Number).sort((a, b) => a - b)) {
+      cum += dist[seats]!;
+      if (cum >= target) return seats;
+    }
+    return 0;
+  };
   return {
     races: result.forecasts.filter((f) => idx.some((i) => simRaces[i]!.race.id === f.raceId)),
     demControlProb: controlWins / n,
     seatDistribution: dist,
     meanSeats: seatSum / n,
+    seatsP10: seatQuantile(0.1),
+    seatsP90: seatQuantile(0.9),
   };
 }

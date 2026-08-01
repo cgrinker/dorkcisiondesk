@@ -62,6 +62,27 @@ Per race, the pipeline is **average → prior → blend → simulate**:
    Georgia propagates to North Carolina. Per-sim win vectors roll up to seat
    counts and P(chamber control). Runs are seeded by run id → reproducible.
 
+### The House model
+
+All 435 districts are modeled fundamentals-first: district lean (2024
+presidential margin on the **2026 maps** — including mid-decade redistricting
+— minus the national margin; computed by `scripts/build-district-leans.mjs`
+from The Downballot's data, reconciled against certified national totals and
+statewide spot-checks before seeding) + 0.8 × generic ballot + incumbency
+(FEC `incumbent_challenge` + The Downballot's incumbent list) + fundraising,
+with VoteHub district polls layered on where they exist (~30 districts).
+District idiosyncratic error uses a 5-pt floor (vs 3 statewide) per the
+rawpolls calibration. Chamber rollup: 218 to control.
+
+### Uncertainty is part of the API
+
+Every race reports `demMarginSd`, an 80% interval (`demMarginP10`/`P90`)
+taken from the simulation distribution (not a normal approximation — the
+fat tails are in it), and `demWinProbMcSe`, the Monte Carlo sampling error
+on the win probability. Chambers report `seatsP10`/`seatsP90` alongside the
+full seat distribution. A lean-driven House district at 93 days shows an
+80% margin interval of roughly ±15 pts — that width is the honest answer.
+
 ### Honest caveats
 
 - Coefficients (incumbency, elasticity, sponsor shift, error sds) are
@@ -70,8 +91,9 @@ Per race, the pipeline is **average → prior → blend → simulate**:
 - `SENATE_BASELINE_DEM` in `src/model/forecast.ts` and the race map in
   `seed.sql` are seed data — **verify against the final 2026 map** (specials,
   retirements, independents who caucus).
-- House model (generic ballot + uniform swing + district PVI) is not wired up
-  yet; the schema supports it.
+- Uncontested and same-party (top-two) House districts are simulated like
+  any other race rather than auto-awarded; their leans make this mostly
+  harmless, but it's unmodeled structure.
 - Governor candidates/nominees come from Ballotpedia (no FEC for state
   races); top-four states (AK) never resolve D/R nominees automatically and
   pool all matchups.
@@ -105,6 +127,9 @@ npx wrangler d1 create elections           # paste id into wrangler.jsonc
 npx wrangler kv namespace create FORECAST_CACHE  # paste id into wrangler.jsonc
 npm run db:init                            # schema, local
 npx wrangler d1 execute elections --local --file=./seed.sql
+npx wrangler d1 execute elections --local --file=./seed-governors.sql
+node scripts/build-district-leans.mjs      # Downballot pres-by-CD -> house seed
+npx wrangler d1 execute elections --local --file=./data/seed-house.sql
 npm run ratings                            # Silver Bulletin xlsx -> ratings SQL
 npx wrangler d1 execute elections --local --file=./data/pollster-ratings.sql
 npm run dev

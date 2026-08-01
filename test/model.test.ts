@@ -327,6 +327,29 @@ describe("simulation", () => {
     expect(both / first).toBeGreaterThan(0.6);
   });
 
+  it("reports margin confidence intervals from the sim distribution", () => {
+    const { forecasts } = simulate(simRaces, 94, 10000, "seed-ci");
+    for (const f of forecasts) {
+      expect(f.demMarginP10).toBeLessThan(f.demMarginMean);
+      expect(f.demMarginP90).toBeGreaterThan(f.demMarginMean);
+      // An 80% interval of a ~N(mean, sd) is about mean +/- 1.28 sd; the
+      // t-tails widen it slightly. Sanity-bound it.
+      const halfWidth = (f.demMarginP90 - f.demMarginP10) / 2;
+      expect(halfWidth).toBeGreaterThan(f.demMarginSd);
+      expect(halfWidth).toBeLessThan(2 * f.demMarginSd);
+      expect(f.demWinProbMcSe).toBeGreaterThan(0);
+      expect(f.demWinProbMcSe).toBeLessThan(0.01);
+    }
+  });
+
+  it("house races carry more idiosyncratic uncertainty than statewide races", () => {
+    const senate: SimRace[] = [{ race: race("s"), blended: { margin: 2, sd: 2, pollWeight: 0.5 }, nPolls: 3 }];
+    const house: SimRace[] = [{ race: race("h", { type: "house" }), blended: { margin: 2, sd: 2, pollWeight: 0.5 }, nPolls: 3 }];
+    const sSd = simulate(senate, 94, 20000, "x").forecasts[0]!.demMarginSd;
+    const hSd = simulate(house, 94, 20000, "x").forecasts[0]!.demMarginSd;
+    expect(hSd).toBeGreaterThan(sSd + 1);
+  });
+
   it("rolls up to chamber control", () => {
     const result = simulate(simRaces, 94, 5000, "seed-4");
     const chamber = chamberSummary(simRaces, result, (r) => r.type === "senate", 48, 51);
