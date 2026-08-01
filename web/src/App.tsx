@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
-import { fetchHistory, fetchRaces, fetchSummary, type HistoryRow, type RaceRow, type Summary } from "./api";
+import { Fragment, useEffect, useState } from "react";
+import {
+  fetchHistory, fetchPolls, fetchRaces, fetchSummary,
+  type HistoryRow, type PollRow, type RaceRow, type Summary,
+} from "./api";
 import { MarginCI, SeatHistogram, TrendChart } from "./charts";
 import { DistrictTileMap, MapLegend, StateTileMap } from "./tilemap";
 import { fmtLeaderProb, fmtMargin, fmtPct, matchup, raceLabel } from "./format";
@@ -10,6 +13,20 @@ export default function App() {
   const [tab, setTab] = useState<"senate" | "house" | "governor">("senate");
   const [races, setRaces] = useState<Record<string, RaceRow[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [polls, setPolls] = useState<Record<string, PollRow[] | "loading">>({});
+
+  const toggleRace = (raceId: string) => setExpanded((cur) => (cur === raceId ? null : raceId));
+
+  useEffect(() => {
+    if (expanded && !polls[expanded]) {
+      const raceId = expanded;
+      setPolls((p) => ({ ...p, [raceId]: "loading" }));
+      fetchPolls(raceId)
+        .then((rows) => setPolls((p) => ({ ...p, [raceId]: rows })))
+        .catch(() => setPolls((p) => ({ ...p, [raceId]: [] })));
+    }
+  }, [expanded, polls]);
 
   useEffect(() => {
     fetchSummary().then(setSummary).catch((e) => setError(String(e)));
@@ -105,22 +122,35 @@ export default function App() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.race_id}>
-                <td className="race-name">
-                  {raceLabel(r)}
-                  <span className="who">{matchup(r)}</span>
-                </td>
-                <td>
-                  <span className="prob" style={{ color: r.dem_win_prob >= 0.5 ? "var(--dem)" : "var(--rep)" }}>
-                    {fmtLeaderProb(r.dem_win_prob)}
-                  </span>
-                </td>
-                <td>{fmtMargin(r.dem_margin_mean)}</td>
-                <td>
-                  <MarginCI p10={r.dem_margin_p10} p90={r.dem_margin_p90} mean={r.dem_margin_mean} />
-                </td>
-                <td>{r.n_polls}</td>
-              </tr>
+              <Fragment key={r.race_id}>
+                <tr
+                  className="clickable"
+                  onClick={() => toggleRace(r.race_id)}
+                  aria-expanded={expanded === r.race_id}
+                >
+                  <td className="race-name">
+                    <span className="chev">{expanded === r.race_id ? "▾" : "▸"}</span> {raceLabel(r)}
+                    <span className="who">{matchup(r)}</span>
+                  </td>
+                  <td>
+                    <span className="prob" style={{ color: r.dem_win_prob >= 0.5 ? "var(--dem)" : "var(--rep)" }}>
+                      {fmtLeaderProb(r.dem_win_prob)}
+                    </span>
+                  </td>
+                  <td>{fmtMargin(r.dem_margin_mean)}</td>
+                  <td>
+                    <MarginCI p10={r.dem_margin_p10} p90={r.dem_margin_p90} mean={r.dem_margin_mean} />
+                  </td>
+                  <td>{r.n_polls}</td>
+                </tr>
+                {expanded === r.race_id && (
+                  <tr className="poll-detail">
+                    <td colSpan={5}>
+                      <PollList rows={polls[r.race_id]} pollWeight={r.poll_weight} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {rows.length === 0 && (
               <tr>
@@ -138,6 +168,67 @@ export default function App() {
         distribution. Data: Silver Bulletin, VoteHub, Wikipedia contributors (CC-BY-SA), Ballotpedia, The
         Downballot, FEC, FRED. <a href="/docs">API docs</a>
       </p>
+    </div>
+  );
+}
+
+function PollList({ rows, pollWeight }: { rows: PollRow[] | "loading" | undefined; pollWeight: number }) {
+  if (rows === "loading" || rows === undefined) return <div className="poll-note">Loading polls…</div>;
+  if (rows.length === 0) {
+    return (
+      <div className="poll-note">
+        No polls in the model — this forecast is fundamentals-driven (district lean + national environment
+        + incumbency).
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="poll-note">
+        {Math.round(100 * pollWeight)}% of this forecast comes from polls; the rest is fundamentals.
+      </div>
+      <table className="polls-sub">
+        <thead>
+          <tr>
+            <th>Pollster</th>
+            <th>Dates</th>
+            <th>Sample</th>
+            <th>Dem</th>
+            <th>Rep</th>
+            <th>Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p, i) => {
+            const margin = p.dem_pct - p.rep_pct;
+            return (
+              <tr key={i}>
+                <td>
+                  {p.source_url ? (
+                    <a href={p.source_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                      {p.pollster}
+                    </a>
+                  ) : (
+                    p.pollster
+                  )}
+                  {p.sponsor_party && <span className="sponsor"> ({p.sponsor_party} sponsor)</span>}
+                </td>
+                <td>
+                  {p.start_date.slice(5)} – {p.end_date.slice(5)}
+                </td>
+                <td>
+                  {p.sample_size ?? "?"} {p.population?.toUpperCase() ?? ""}
+                </td>
+                <td>{p.dem_pct}%</td>
+                <td>{p.rep_pct}%</td>
+                <td style={{ color: margin >= 0 ? "var(--dem)" : "var(--rep)", fontWeight: 550 }}>
+                  {fmtMargin(margin)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

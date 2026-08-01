@@ -60,6 +60,21 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export interface PollRow {
+  race_id: string;
+  pollster: string;
+  start_date: string;
+  end_date: string;
+  sample_size: number | null;
+  population: string | null;
+  dem_pct: number;
+  rep_pct: number;
+  sponsor_party: string | null;
+  source_url: string | null;
+}
+
 export const fetchSummary = () => get<Summary>("/summary");
+export const fetchPolls = (raceId: string) =>
+  get<PollRow[]>(`/polls?race=${encodeURIComponent(raceId)}&limit=15`);
 export const fetchRaces = (type: string) => get<RaceRow[]>(`/races?type=${type}&limit=500`);
 export const fetchHistory = () => get<HistoryRow[]>("/history?limit=90");
