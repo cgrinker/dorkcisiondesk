@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "elections",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "observability": { "enabled": true },
+
+  // Scrape polls every 2 hours; rebuild the forecast 15 min after each scrape window.
+  "triggers": {
+    "crons": [
+      "0 */2 * * *",  // scrape
+      "15 */2 * * *"  // model run
+    ]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "elections",
+      "database_id": "8f4bdaaa-9ef1-434b-b042-4721fa7bcbd6"
+    }
+  ],
+
+  "kv_namespaces": [
+    {
+      "binding": "FORECAST_CACHE",
+      "id": "77bbe7ecd7194c52adb2a37aea18cfc0"
+    }
+  ],
+
+  "vars": {
+    "ELECTION_DAY": "2026-11-03",
+    "CYCLE": "2026"
+  }
+  // Secrets (set via `wrangler secret put`):
+  //   FEC_API_KEY  - api.open.fec.gov (free, instant signup)
+  //   FRED_API_KEY - fred.stlouisfed.org (free)
+}
