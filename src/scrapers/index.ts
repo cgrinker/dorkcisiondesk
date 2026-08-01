@@ -24,6 +24,7 @@ const CADENCE_HOURS: Record<string, number> = {
   "votehub-senate": 2,
   "votehub-governor": 2,
   "silver-bulletin-gb": 6,
+  "wikipedia-races": 12,
   "ballotpedia-nominees": 12,
   fec: 24,
   fred: 24,

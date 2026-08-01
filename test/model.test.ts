@@ -7,6 +7,7 @@ import { simulate, chamberSummary, type SimRace } from "../src/model/simulate";
 import { matchCandidate, testsPrimaryLoser, type RaceCandidate } from "../src/scrapers/candidates";
 import { cooldownHours, isDue, markRan, startCooldown } from "../src/scrapers/throttle";
 import { parseCandidates, parseNominees } from "../src/scrapers/nominees";
+import { parseDateRange, parseWikiPolls } from "../src/scrapers/wikipedia";
 import type { Race, ScoredPoll } from "../src/types";
 
 function poll(overrides: Partial<ScoredPoll> = {}): ScoredPoll {
@@ -212,6 +213,46 @@ describe("ballotpedia nominee parsing", () => {
       block("Republican primary runoff for U.S. Senate Texas", [{ name: "Ken Paxton", winner: true }]) +
       pending;
     expect(parseNominees(decided)).toEqual({ R: "Ken Paxton" });
+  });
+});
+
+describe("wikipedia poll parsing", () => {
+  it("parses date ranges in all observed formats", () => {
+    expect(parseDateRange("July 28–30, 2026")).toEqual(["2026-07-28", "2026-07-30"]);
+    expect(parseDateRange("June 30 – July 2, 2026")).toEqual(["2026-06-30", "2026-07-02"]);
+    expect(parseDateRange("July 28, 2026")).toEqual(["2026-07-28", "2026-07-28"]);
+    expect(parseDateRange("through July 30, 2026")).toBeNull();
+  });
+
+  const table = (headers: string[], rows: string[][]) =>
+    `<table class="wikitable sortable"><tbody><tr>` +
+    headers.map((h) => `<th>${h}</th>`).join("") +
+    `</tr>` +
+    rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("") +
+    `</tbody></table>`;
+
+  it("extracts general-election polls, skipping primaries and aggregates", () => {
+    const html =
+      // primary table: no (R) column -> ignored
+      table(["Poll source", "Date(s) administered", "Sample size", "Margin of error", "Abdul El-Sayed", "Haley Stevens"],
+        [["Emerson", "July 1–2, 2026", "500 (LV)", "± 4%", "40%", "45%"]]) +
+      table(
+        ["Poll source", "Date(s) administered", "Sample size", "Margin of error", "Haley <br/>Stevens (D)", "Mike Rogers (R)", "Other", "Undecided"],
+        [
+          ["SoCal Strategies (R)", "July 28–30, 2026", "640 (LV)", "± 3.8%", "44%", "42%", "—", "14%"],
+          ["Glengariff Group&#91;a&#93;", "July 22–24, 2026", "600 (LV)", "± 4.0%", "45.5%", "44.7%", "1%", "9%"],
+          ["Average", "45%", "43%", "", ""],
+        ],
+      );
+    const polls = parseWikiPolls(html);
+    expect(polls).toHaveLength(2);
+    expect(polls[0]).toMatchObject({
+      pollster: "SoCal Strategies", sponsorParty: "R",
+      startDate: "2026-07-28", endDate: "2026-07-30",
+      sampleSize: 640, population: "lv", demPct: 44, repPct: 42,
+      demName: "Haley Stevens", repName: "Mike Rogers",
+    });
+    expect(polls[1]).toMatchObject({ pollster: "Glengariff Group", sponsorParty: null, demPct: 45.5, repPct: 44.7 });
   });
 });
 

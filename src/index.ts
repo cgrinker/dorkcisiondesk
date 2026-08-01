@@ -23,7 +23,7 @@ export default {
           stale: ageMs > 6 * 3_600_000, // point an uptime monitor at this
           credits: {
             pollster_ratings_and_generic_ballot: "Silver Bulletin (natesilver.net)",
-            race_polls: "VoteHub (votehub.com)",
+            race_polls: "VoteHub (votehub.com); Wikipedia contributors (CC-BY-SA)",
             primary_results: "Ballotpedia (ballotpedia.org)",
             campaign_finance: "Federal Election Commission",
             economic_data: "FRED, Federal Reserve Bank of St. Louis",

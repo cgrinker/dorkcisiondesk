@@ -250,8 +250,14 @@ function parseCsv(text: string): string[][] {
     });
 }
 
+import { wikipediaRaces } from "./wikipedia";
+
+// Order matters for cross-source dedup: VoteHub is the primary race-poll
+// feed, so it ingests first; Wikipedia (the redundancy feed) then only adds
+// polls the primaries missed.
 export const POLL_SOURCES: PollSource[] = [
   silverBulletinGenericBallot,
   votehubSenate,
   votehubGovernor,
+  wikipediaRaces,
 ];

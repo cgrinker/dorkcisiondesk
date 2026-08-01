@@ -14,14 +14,19 @@ export async function ingestPolls(env: Env, polls: Poll[]): Promise<number> {
       env.DB.prepare("INSERT OR IGNORE INTO pollsters (name) VALUES (?)").bind(n),
     ),
   );
-  const idRows = (
-    await env.DB.prepare(
-      `SELECT id, name FROM pollsters WHERE name IN (${names.map(() => "?").join(",")})`,
-    )
-      .bind(...names)
-      .all<{ id: number; name: string }>()
-  ).results;
-  const pollsterIds = new Map(idRows.map((r) => [r.name, r.id]));
+  // D1 caps bound parameters per statement — chunk the name lookup.
+  const pollsterIds = new Map<string, number>();
+  for (let i = 0; i < names.length; i += 50) {
+    const chunk = names.slice(i, i + 50);
+    const idRows = (
+      await env.DB.prepare(
+        `SELECT id, name FROM pollsters WHERE name IN (${chunk.map(() => "?").join(",")})`,
+      )
+        .bind(...chunk)
+        .all<{ id: number; name: string }>()
+    ).results;
+    for (const r of idRows) pollsterIds.set(r.name, r.id);
+  }
 
   // On re-scrape, backfill candidate ids onto existing rows (they were added
   // after early ingests); the WHERE keeps unchanged rows out of the change
