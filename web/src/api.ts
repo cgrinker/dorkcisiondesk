@@ -61,6 +61,5 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const fetchSummary = () => get<Summary>("/summary");
-export const fetchRaces = (type: string) =>
-  get<RaceRow[]>(`/races?type=${type}&competitive=1&limit=40`);
+export const fetchRaces = (type: string) => get<RaceRow[]>(`/races?type=${type}&limit=500`);
 export const fetchHistory = () => get<HistoryRow[]>("/history?limit=90");

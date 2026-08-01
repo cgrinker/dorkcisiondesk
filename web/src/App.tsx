@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchHistory, fetchRaces, fetchSummary, type HistoryRow, type RaceRow, type Summary } from "./api";
 import { MarginCI, SeatHistogram, TrendChart } from "./charts";
+import { DistrictTileMap, MapLegend, StateTileMap } from "./tilemap";
 
 const fmtPct = (p: number) => `${(100 * p).toFixed(0)}%`;
 const fmtMargin = (m: number) => (m >= 0 ? `D+${m.toFixed(1)}` : `R+${(-m).toFixed(1)}`);
@@ -51,7 +52,8 @@ export default function App() {
   if (error) return <div className="app">Failed to load forecast: {error}</div>;
   if (!summary) return <div className="app">Loading forecast…</div>;
 
-  const rows = races[tab] ?? [];
+  const all = races[tab] ?? [];
+  const rows = all.filter((r) => r.dem_win_prob > 0.05 && r.dem_win_prob < 0.95).slice(0, 40);
 
   return (
     <div className="app">
@@ -100,8 +102,11 @@ export default function App() {
       </div>
 
       <div className="panel">
-        <h2>Competitive races</h2>
-        <p className="desc">Sorted by closeness · margin shown with its 80% interval (whisker) on a ±40 pt scale</p>
+        <h2>Race map</h2>
+        <p className="desc">
+          Every race equal weight — tiles are states{tab === "house" ? "; each small square is one district" : ""}.
+          Hover for the forecast.
+        </p>
         <div className="tabs">
           {(["senate", "house", "governor"] as const).map((t) => (
             <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
@@ -109,6 +114,13 @@ export default function App() {
             </button>
           ))}
         </div>
+        {tab === "house" ? <DistrictTileMap races={all} /> : <StateTileMap races={all} />}
+        <MapLegend />
+      </div>
+
+      <div className="panel">
+        <h2>Competitive races</h2>
+        <p className="desc">Sorted by closeness · margin shown with its 80% interval (whisker) on a ±40 pt scale</p>
         <table className="races">
           <thead>
             <tr>

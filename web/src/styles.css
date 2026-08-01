@@ -13,6 +13,7 @@
   --dem: #2a78d6;
   --rep: #e34948;
   --neutral-mid: #f0efec;
+  --map-tossup: #b6b5ad;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -28,6 +29,7 @@
     --dem: #3987e5;
     --rep: #e66767;
     --neutral-mid: #383835;
+    --map-tossup: #55544e;
   }
 }
 
@@ -97,6 +99,10 @@ table.races td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-va
 table.races td.race-name { font-weight: 550; white-space: nowrap; }
 table.races td .who { color: var(--muted); font-size: 12px; display: block; }
 .prob { font-weight: 600; }
+
+.map-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-item .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
 .tooltip {
   position: fixed;
