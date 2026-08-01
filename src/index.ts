@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { runForecast } from "./model/forecast";
 import { scrapeAll } from "./scrapers";
+import { DOCS, history, meta, pollsList, raceDetail, racesList } from "./api";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -12,6 +13,12 @@ export default {
       }
     }
 
+    // GET /races/{id}
+    if (url.pathname.startsWith("/races/") && url.pathname.length > 7) {
+      const detail = await raceDetail(env, url.pathname.slice(7));
+      return detail ? json(detail) : json({ error: "unknown race" }, 404);
+    }
+
     switch (url.pathname) {
       case "/": {
         const cached = await env.FORECAST_CACHE.get("latest");
@@ -21,48 +28,26 @@ export default {
         return json({
           ...summary,
           stale: ageMs > 6 * 3_600_000, // point an uptime monitor at this
-          credits: {
-            pollster_ratings_and_generic_ballot: "Silver Bulletin (natesilver.net)",
-            race_polls: "VoteHub (votehub.com); Wikipedia contributors (CC-BY-SA)",
-            primary_results: "Ballotpedia (ballotpedia.org)",
-            campaign_finance: "Federal Election Commission",
-            economic_data: "FRED, Federal Reserve Bank of St. Louis",
-          },
+          docs: "/docs",
+          credits: DOCS.credits,
         });
       }
 
-      case "/races": {
-        const rows = await env.DB.prepare(
-          `SELECT f.* FROM forecasts f
-            WHERE f.run_id = (SELECT id FROM runs ORDER BY id DESC LIMIT 1)
-            ORDER BY ABS(f.dem_win_prob - 0.5) ASC`,
-        ).all();
-        return json(rows.results);
-      }
+      case "/races":
+        return json(await racesList(env, url));
 
-      case "/polls": {
-        const race = url.searchParams.get("race");
-        const rows = await env.DB.prepare(
-          `SELECT p.*, ps.name AS pollster FROM polls p
-             JOIN pollsters ps ON ps.id = p.pollster_id
-            WHERE (? IS NULL OR p.race_id = ?)
-            ORDER BY p.end_date DESC LIMIT 200`,
-        )
-          .bind(race, race)
-          .all();
-        return json(rows.results);
-      }
+      case "/polls":
+        return json(await pollsList(env, url));
 
-      case "/history": {
-        const rows = await env.DB.prepare(
-          "SELECT id, n_sims, summary_json FROM runs ORDER BY id DESC LIMIT 50",
-        ).all();
-        return json(
-          rows.results.map((r) => ({ ...r, summary_json: JSON.parse(r.summary_json as string) })),
-        );
-      }
+      case "/history":
+        return json(await history(env, url));
 
-      // Manual triggers for development; put behind auth before exposing publicly.
+      case "/meta":
+        return json(await meta(env), 200, 60);
+
+      case "/docs":
+        return json(DOCS, 200, 3600);
+
       // ?force=1 bypasses per-source throttle gating (e.g. right after a
       // primary is called). Cooldowns from upstream pushback also reset.
       case "/admin/scrape":
@@ -112,7 +97,7 @@ export default {
       }
 
       default:
-        return json({ error: "not found" }, 404);
+        return json({ error: "not found", docs: "/docs" }, 404);
     }
   },
 
@@ -127,13 +112,13 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-function json(data: unknown, status = 200): Response {
+function json(data: unknown, status = 200, maxAge = 300): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "content-type": "application/json",
       "access-control-allow-origin": "*",
-      "cache-control": "public, max-age=300",
+      "cache-control": `public, max-age=${maxAge}`,
     },
   });
 }
