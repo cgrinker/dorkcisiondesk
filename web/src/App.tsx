@@ -44,7 +44,7 @@ export default function App() {
         <Tile
           label="Senate control"
           probDem={summary.senate.demControlProb}
-          sub={`mean ${summary.senate.meanSeats.toFixed(0)} D seats [${summary.senate.seatsP10}–${summary.senate.seatsP90}]`}
+          sub={`mean ${summary.senate.meanSeats.toFixed(0)} Dem-caucus seats [${summary.senate.seatsP10}–${summary.senate.seatsP90}]`}
         />
         <div className="card">
           <div className="label">Generic ballot</div>
