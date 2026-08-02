@@ -52,7 +52,7 @@ const excelToIso = (serial: number) =>
 
 function loadRaces() {
   const wb = XLSX.read(readFileSync("data/rawpolls.xlsx"), { type: "buffer" });
-  const rows = XLSX.utils.sheet_to_json<RawRow>(wb.Sheets[wb.SheetNames[0]]!);
+  const rows = XLSX.utils.sheet_to_json<RawRow>(wb.Sheets[wb.SheetNames[0]!]!);
 
   // race key -> { polls, actualDemMargin, electiondate }
   const races = new Map<string, { polls: ScoredPoll[]; actual: number; electionIso: string }>();
