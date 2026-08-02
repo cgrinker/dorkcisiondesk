@@ -30,6 +30,21 @@ cron (every 2h)                    cron (+15min)
 | `POST /admin/run` | Manual model run (dev) |
 | `POST /admin/nominee?race=sen-2026-MI&party=D&name=stevens` | Call a primary; the model then drops matchup polls that tested primary losers. `&clear=1` un-calls it |
 
+## The framework
+
+Three standing commitments, each with its own doc:
+
+1. **Explainable at advanced-high-school-math level** — the entire model in
+   weighted averages, addition, and dice: [docs/model-math.md](docs/model-math.md).
+   This is also the review bar: a feature that can't be written on that page
+   in that language doesn't ship.
+2. **Backtesting is documented and enforced** — what we test against
+   2006–2022, the four error measures, and what is/isn't validated:
+   [docs/backtesting.md](docs/backtesting.md). Runs in CI; gates fail the build.
+3. **Data robustness is a contract** — every input has redundancy or a
+   documented single point of failure, with detection and overrides:
+   [docs/data-reliability.md](docs/data-reliability.md).
+
 ## The model
 
 Per race, the pipeline is **average → prior → blend → simulate**:

@@ -4,6 +4,7 @@
  */
 
 import type { Env } from "./types";
+import { CADENCE_HOURS } from "./scrapers";
 
 /** Slim per-run time series — toplines only, no per-race arrays. */
 export async function history(env: Env, url: URL): Promise<unknown> {
@@ -123,7 +124,7 @@ export async function pollsList(env: Env, url: URL): Promise<unknown> {
 export async function meta(env: Env): Promise<unknown> {
   const now = Date.now();
   const throttleKeys = await env.FORECAST_CACHE.list({ prefix: "throttle:" });
-  const sources: Record<string, { lastRun?: string; cooldownUntil?: string }> = {};
+  const sources: Record<string, { lastRun?: string; cooldownUntil?: string; health?: string }> = {};
   for (const key of throttleKeys.keys) {
     const value = await env.FORECAST_CACHE.get(key.name);
     if (!value) continue;
@@ -132,6 +133,18 @@ export async function meta(env: Env): Promise<unknown> {
     const entry = (sources[source] ??= {});
     if (kind === "last") entry.lastRun = new Date(Number(value)).toISOString();
     if (kind === "cooldown") entry.cooldownUntil = new Date(Number(value)).toISOString();
+  }
+  // Health verdict: a source is overdue past 2.5x its cadence — the signal
+  // that it died quietly (vs cooling-down, which is deliberate backoff).
+  for (const [name, entry] of Object.entries(sources)) {
+    if (entry.cooldownUntil && Date.parse(entry.cooldownUntil) > now) {
+      entry.health = "cooling-down";
+    } else if (entry.lastRun) {
+      const cadenceMs = (CADENCE_HOURS[name] ?? 2) * 3_600_000;
+      entry.health = now - Date.parse(entry.lastRun) > 2.5 * cadenceMs ? "overdue" : "ok";
+    } else {
+      entry.health = "never-ran";
+    }
   }
 
   const counts = await env.DB.prepare(

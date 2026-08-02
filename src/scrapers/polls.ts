@@ -169,6 +169,60 @@ const votehubHouse = votehubSource("votehub-house", "us-representative", (body) 
   return `house-2026-${m[1]}-${String(district).padStart(2, "0")}`;
 });
 
+/**
+ * Generic-ballot fallback (Silver Bulletin's sheet is the primary): VoteHub's
+ * generic-ballot feed, cross-source deduped so only polls the primary missed
+ * are added. Keeps the national environment flowing if the SB sheet vanishes.
+ */
+const votehubGeneric: PollSource = {
+  name: "votehub-generic",
+  async fetch(env) {
+    const res = await fetch(
+      "https://api.votehub.com/polls?poll_type=generic-ballot&page_size=1000",
+      { headers: { "user-agent": USER_AGENT } },
+    );
+    if (!res.ok) throw new HttpError(res.status, `votehub ${res.status}`);
+    const raw = (await res.json()) as VoteHubPoll[];
+    const raceId = `generic-${env.CYCLE}`;
+
+    const existing = (
+      await env.DB.prepare(
+        "SELECT end_date, dem_pct, rep_pct FROM polls WHERE race_id = ? AND end_date > date('now', '-150 days')",
+      )
+        .bind(raceId)
+        .all<{ end_date: string; dem_pct: number; rep_pct: number }>()
+    ).results.map((e) => ({ end: Date.parse(e.end_date), dem: e.dem_pct, rep: e.rep_pct }));
+
+    const polls: Poll[] = [];
+    for (const p of raw) {
+      if (p.subject !== env.CYCLE) continue;
+      const dem = p.answers.find((a) => /^dem/i.test(a.choice))?.pct;
+      const rep = p.answers.find((a) => /^rep/i.test(a.choice))?.pct;
+      if (dem === undefined || rep === undefined) continue;
+      const dup = existing.some(
+        (e) =>
+          Math.abs(e.end - Date.parse(p.end_date)) <= 86_400_000 &&
+          Math.abs(e.dem - dem) < 0.7 &&
+          Math.abs(e.rep - rep) < 0.7,
+      );
+      if (dup) continue;
+      polls.push({
+        raceId,
+        pollster: p.pollster,
+        startDate: p.start_date,
+        endDate: p.end_date,
+        sampleSize: p.sample_size,
+        population: normPopulation(p.population),
+        demPct: dem,
+        repPct: rep,
+        sponsorParty: normPartisan(p.partisan),
+        sourceUrl: p.url ?? undefined,
+      });
+    }
+    return polls;
+  },
+};
+
 const SB_ARTICLE =
   "https://www.natesilver.net/p/generic-ballot-average-2026-nate-silver-bulletin-congress-polls";
 
@@ -278,5 +332,6 @@ export const POLL_SOURCES: PollSource[] = [
   votehubSenate,
   votehubGovernor,
   votehubHouse,
+  votehubGeneric,
   wikipediaRaces,
 ];

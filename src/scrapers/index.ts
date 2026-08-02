@@ -20,11 +20,12 @@ import { cooldownHours, HttpError, isDue, markRan, startCooldown } from "./throt
 
 /** Requests per day at these cadences: votehub ~12, silver bulletin CSV ~4
  *  (+ ~1 article-page hit/day for link resolution), FEC ~10, FRED ~3. */
-const CADENCE_HOURS: Record<string, number> = {
+export const CADENCE_HOURS: Record<string, number> = {
   "votehub-senate": 2,
   "votehub-governor": 2,
   "votehub-house": 6,
   "silver-bulletin-gb": 6,
+  "votehub-generic": 12,
   "wikipedia-races": 12,
   "ballotpedia-nominees": 12,
   fec: 24,
