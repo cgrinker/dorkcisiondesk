@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+
 import * as XLSX from "xlsx";
 import { averagePolls, estimateHouseEffects } from "../src/model/pollAverage";
 import { blend } from "../src/model/blend";
@@ -51,7 +51,7 @@ const excelToIso = (serial: number) =>
   new Date((serial - 25569) * 86_400_000).toISOString().slice(0, 10);
 
 function loadRaces() {
-  const wb = XLSX.read(readFileSync("data/rawpolls.xlsx"), { type: "buffer" });
+  const wb = XLSX.readFile("data/rawpolls.xlsx");
   const rows = XLSX.utils.sheet_to_json<RawRow>(wb.Sheets[wb.SheetNames[0]!]!);
 
   // race key -> { polls, actualDemMargin, electiondate }
