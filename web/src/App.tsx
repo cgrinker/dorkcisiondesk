@@ -167,7 +167,7 @@ export default function App() {
         Correlated Monte Carlo forecast — races are not independent; intervals come from the simulation
         distribution. Backtested on 411 races, 2006–2022. Data: Silver Bulletin, VoteHub, Wikipedia
         contributors (CC-BY-SA), Ballotpedia, The Downballot, FEC, FRED.{" "}
-        <a href="/methodology.html">How this works</a> · <a href="/docs">API docs</a>
+        <a href="/methodology">How this works</a> · <a href="/docs">API docs</a>
       </p>
     </div>
   );
