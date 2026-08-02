@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Methodology · 2026 Midterm Forecast</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e;
+    --muted:#898781; --grid:#e1e0d9; --border:rgba(11,11,11,.1);
+    --dem:#2a78d6; --rep:#e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7;
+      --muted:#898781; --grid:#2c2c2a; --border:rgba(255,255,255,.1);
+      --dem:#3987e5; --rep:#e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--page); color:var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size:15px; line-height:1.6; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 34px 0 8px; }
+  p, li { color: var(--ink-2); }
+  strong { color: var(--ink); }
+  a { color: var(--dem); }
+  .lede { font-size: 15px; }
+  pre.pipeline { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .04em; font-weight: 500; padding: 4px 10px 6px 0; border-bottom: 1px solid var(--grid); }
+  td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); color: var(--ink-2); }
+  .back { font-size: 13px; }
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="back"><a href="/">← back to the forecast</a></p>
+  <h1>How this forecast works</h1>
+  <p class="lede">
+    A Monte Carlo election model in the tradition of poll-plus-fundamentals forecasters. It models
+    every 2026 Senate race (35), governorship (36), and House district (435), refreshes itself every
+    two hours, and — most importantly — reports <strong>how uncertain it is</strong> alongside every number.
+  </p>
+
+  <h2>What we measure</h2>
+  <p>
+    For each race we estimate the <strong>Democratic-minus-Republican margin</strong> on election day and the
+    probability the Democrat (or Dem-caucusing candidate) wins. Chamber toplines count seats across
+    correlated simulations: 218 for the House; 51 for the Senate, where the 34 Dem-caucus seats not up
+    this cycle (including the independents who caucus with Democrats) are the baseline and the VP
+    tie-breaker is Republican.
+  </p>
+
+  <h2>The pipeline</h2>
+  <pre class="pipeline">every 2 hours (Cloudflare Worker cron)
+│
+├─ POLLS        VoteHub API (race-level) · Wikipedia race articles (redundancy feed,
+│               cross-source deduped) · Silver Bulletin sheet (generic ballot)
+├─ CANDIDATES   FEC filings (federal) · Ballotpedia (governors, primary results,
+│               automatic nominee calls — incl. RCV and post-primary withdrawals)
+├─ MONEY/ECON   FEC receipts · FRED (unemployment, inflation, sentiment)
+│
+▼
+MODEL RUN (every 2 hours, 10,000 simulations)
+1. average    weighted poll average per race: recency decay, sample size,
+              pollster quality (Silver Bulletin ratings), in-model house-effect
+              estimation, partisan-sponsor and RV/LV adjustments; polls testing
+              primary losers are excluded once a nominee is called
+2. prior      fundamentals: partisan lean (2024 presidential results on the
+              2026 maps, reconciled to certified totals) + 0.8 × generic ballot
+              + incumbency + relative fundraising
+3. blend      precision-weighted: sparse/stale polling → fundamentals dominate;
+              heavy fresh polling → polls dominate (each race reports its split)
+4. simulate   correlated Monte Carlo: shared national error (Student-t, fat
+              tails) + regional errors + per-race noise → win probabilities,
+              80% margin intervals, seat distributions</pre>
+
+  <h2>Why correlated simulation matters</h2>
+  <p>
+    Races are not independent: if polls are wrong in Michigan they're probably wrong the same way in
+    Wisconsin. Every simulation draws one shared national polling error (fat-tailed, so 2016- and
+    2020-sized systematic misses occur at their historical frequency — the cycle-level polling error
+    1998–2024 has a standard deviation of about 3 points), plus regional and race-level noise.
+    This is why a candidate up 3 points on election eve is a ~73% favorite here, never 99%.
+  </p>
+
+  <h2>Backtest</h2>
+  <p>
+    The statistical core (poll averaging, house effects, blending, and the error model) is run as an
+    election-eve forecast against every Senate and governor's race from <strong>2006–2022 with at least two
+    late polls — 411 races across 9 cycles</strong> — and scored against actual results
+    (data: Silver Bulletin rawpolls archive). This backtest runs in CI on every change to the model.
+  </p>
+  <table>
+    <tr><th>Predicted Dem win chance</th><th>Races</th><th>Actually won</th></tr>
+    <tr><td>~2%</td><td>114</td><td>0%</td></tr>
+    <tr><td>~16%</td><td>25</td><td>12%</td></tr>
+    <tr><td>~33%</td><td>26</td><td>12%</td></tr>
+    <tr><td>~50%</td><td>33</td><td>39%</td></tr>
+    <tr><td>~65%</td><td>52</td><td>73%</td></tr>
+    <tr><td>~83%</td><td>37</td><td>95%</td></tr>
+    <tr><td>~98%</td><td>124</td><td>99%</td></tr>
+  </table>
+  <p>
+    <strong>Brier score 0.069</strong> (0 is perfect; always-guessing-50% scores 0.25) ·
+    <strong>80% intervals covered the actual margin 81.0% of the time</strong> ·
+    mean absolute margin error <strong>4.8 points</strong>. The first version of the error model was
+    wider than history justified (89% coverage); the race-level noise term was re-fit so stated
+    intervals mean what they say.
+  </p>
+  <div class="note">
+    Honest limits: the backtest exercises the polls-driven path (historical partisan leans aren't in
+    the archive), its error constants were calibrated on the same archive's aggregate statistics, and
+    the House model's district-level noise floor is not separately backtested — district polling is
+    too sparse historically. Mid-range underdogs (the ~16–33% buckets) have won slightly less often
+    than priced; the sample there is small (~25 races per bucket) and we haven't corrected for it.
+  </div>
+
+  <h2>Known limitations</h2>
+  <ul>
+    <li><strong>Crossover incumbents.</strong> Priors are presidential-lean-based, so governors like Vermont's
+      (a Republican who wins a deep-blue state) and House members who outrun their district's lean are
+      systematically mis-priced until polling arrives. This is our largest known gap versus other models.</li>
+    <li><strong>Ranked-choice dynamics.</strong> Alaska's top-four/RCV races are modeled as plain D-vs-R;
+      other forecasters treat them as much closer than our lean-based read.</li>
+    <li><strong>Independents.</strong> Races are reduced to a Dem-caucus vs Republican margin; a serious
+      third candidacy isn't separately modeled.</li>
+    <li><strong>Coefficients.</strong> Incumbency (±2.5), elasticity (0.8), and sponsor adjustments are
+      literature-standard values, not fitted; the backtest validates the polling path, not these.</li>
+  </ul>
+
+  <h2>Data &amp; credits</h2>
+  <p>
+    Polls: <a href="https://votehub.com">VoteHub</a> (open API) and Wikipedia contributors (CC-BY-SA).
+    Generic ballot, pollster ratings, and the historical poll archive:
+    <a href="https://www.natesilver.net">Silver Bulletin</a> (used with attribution).
+    Primary results and candidate slates: <a href="https://ballotpedia.org">Ballotpedia</a>.
+    District partisan leans: <a href="https://www.the-downballot.com">The Downballot</a>'s 2024
+    presidential results by congressional district, validated against FEC-certified totals.
+    Campaign finance: <a href="https://www.fec.gov">FEC</a>. Economic data:
+    <a href="https://fred.stlouisfed.org">FRED</a>.
+    The full forecast is available as a <a href="/docs">JSON API</a>.
+  </p>
+</div>
+</body>
+</html>

@@ -40,13 +40,16 @@ export interface SimResult {
 }
 
 /**
- * Irreducible race-level noise floor, calibrated from Silver Bulletin
- * rawpolls 1998-2024 (scripts/calibrate-error-model.mjs): statewide races
- * ~3 pts (late-poll residual ~5.9 minus ~3.5 sampling noise); House
- * districts are noisier (residual ~7.0) -> 5 pts.
+ * Irreducible race-level noise floor. Statewide 1.5 pts: backtested against
+ * 411 Senate/Governor races 2006-2022 (test/backtest.test.ts) — the original
+ * residual-derived 3 pts double-counted uncertainty already carried by the
+ * shared national/regional errors (80% CI coverage 89% instead of 80%);
+ * 1.5 lands coverage at 81%. House 5 pts from the rawpolls district
+ * residual (~7); the House floor is NOT backtested — district polling is
+ * too sparse historically — and mostly matters less than the prior sd.
  */
 function idioFloor(type: Race["type"]): number {
-  return type === "house" ? 5 : 3;
+  return type === "house" ? 5 : 1.5;
 }
 
 // Margin histogram bins for quantiles: 1-pt bins covering [-150, +150].
