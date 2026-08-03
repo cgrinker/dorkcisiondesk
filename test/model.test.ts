@@ -80,6 +80,26 @@ describe("poll adjustments", () => {
     expect(adjustedMargin(poll({ sponsorParty: "R" }))).toBeCloseTo(3.5);
   });
 
+  it("in a sparse race, the newest poll keeps at least half strength", () => {
+    const asOf = new Date("2026-08-01");
+    // Only poll is 5 weeks old: absolute decay would leave ~12% weight.
+    const sparse = averagePolls([poll({ endDate: "2026-06-27", startDate: "2026-06-24" })], asOf, 93);
+    expect(sparse.evidence).toBeGreaterThan(0.4); // floored, not decayed away
+    // A fresh-polled race is untouched by the floor.
+    const fresh = averagePolls([poll({ endDate: "2026-07-30", startDate: "2026-07-28" })], asOf, 93);
+    expect(fresh.evidence).toBeGreaterThan(sparse.evidence);
+    // And staler polls still rank below fresher ones within the race.
+    const mixed = averagePolls(
+      [
+        poll({ demPct: 50, repPct: 40, endDate: "2026-06-27" }),
+        poll({ demPct: 40, repPct: 50, endDate: "2026-05-01" }),
+      ],
+      asOf,
+      93,
+    );
+    expect(mixed.margin).toBeGreaterThan(0);
+  });
+
   it("weights recent polls more", () => {
     const asOf = new Date("2026-08-01");
     const fresh = averagePolls([poll({ demPct: 50, repPct: 40 })], asOf, 94);

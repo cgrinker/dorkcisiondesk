@@ -42,26 +42,33 @@ export function adjustedMargin(p: ScoredPoll): number {
   return margin;
 }
 
-export function pollWeight(p: ScoredPoll, asOf: Date, daysToElection: number): number {
-  const ageDays = Math.max(0, (asOf.getTime() - Date.parse(p.endDate)) / 86_400_000);
-  const halfLife = recencyHalfLife(daysToElection);
-  const recency = Math.pow(0.5, ageDays / halfLife);
-
-  const n = Math.min(p.sampleSize ?? 500, 5000);
-  const size = Math.sqrt(n / 600);
-
-  const sponsorPenalty = p.sponsorParty ? 0.5 : 1;
-  return recency * size * Math.max(0.05, p.quality) * sponsorPenalty;
-}
-
 export function averagePolls(
   polls: ScoredPoll[],
   asOf: Date,
   daysToElection: number,
 ): PollAverage {
-  const points: WeightedPoint[] = polls.map((p) => ({
+  const halfLife = recencyHalfLife(daysToElection);
+  const items = polls.map((p) => {
+    const ageDays = Math.max(0, (asOf.getTime() - Date.parse(p.endDate)) / 86_400_000);
+    const n = Math.min(p.sampleSize ?? 500, 5000);
+    return {
+      p,
+      recency: Math.pow(0.5, ageDays / halfLife),
+      base: Math.sqrt(n / 600) * Math.max(0.05, p.quality) * (p.sponsorParty ? 0.5 : 1),
+    };
+  });
+
+  // A poll only loses weight to FRESHER POLLS, not to the calendar: in a
+  // sparsely polled race the newest poll never decays below half strength
+  // (everything older rescales with it, so fresher still beats staler).
+  // Without this, month-old polls in a once-a-month state decay to nothing
+  // and the fundamentals prior silently takes over the forecast.
+  const maxRecency = Math.max(0, ...items.map((i) => i.recency));
+  const boost = maxRecency > 0 && maxRecency < 0.5 ? 0.5 / maxRecency : 1;
+
+  const points: WeightedPoint[] = items.map(({ p, recency, base }) => ({
     value: adjustedMargin(p),
-    weight: pollWeight(p, asOf, daysToElection),
+    weight: Math.min(1, recency * boost) * base,
   }));
   return {
     margin: weightedMean(points),
