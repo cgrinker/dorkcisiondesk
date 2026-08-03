@@ -67,3 +67,10 @@ against production keys is the known self-inflicted failure mode (FEC's
 - **FEC `party=UNK`** left an incumbent unmapped (Risch) → manual insert.
 - **Undercounted Senate baseline** (King/Sanders) → topline reconciliation
   against an external model is part of the audit toolkit.
+- **Stale-cycle nominee calls** (VT/AK/HI/WY): pages with no current-cycle
+  votebox yet made the previous cycle's completed general the first block,
+  and the general-slate override called old matchups as 2026 nominees (AK
+  briefly showed the 2018 race). Caught by a user hovering the map. Fix:
+  blocks must contain the cycle year to be parsed; position is never proof.
+  Lesson: user-visible surfaces are audit surfaces — matchup labels made a
+  silent data bug visible.
