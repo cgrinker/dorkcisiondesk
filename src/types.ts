@@ -78,6 +78,18 @@ export interface RunSummary {
   senate: ChamberSummary;
   house: ChamberSummary;
   governors: { races: RaceForecast[] };
+  /**
+   * The "+ Midterm drift" track: identical model except the national
+   * environment is shifted `outPartyShift` points toward the president's
+   * opposition (historical midterm drift). The top-level fields are the
+   * default "Measured" track. Both are scored in November.
+   */
+  adjusted?: {
+    outPartyShift: number;
+    senate: ChamberSummary;
+    house: ChamberSummary;
+    governors: { races: RaceForecast[] };
+  };
 }
 
 export interface ChamberSummary {

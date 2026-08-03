@@ -17,7 +17,22 @@ const N_SIMS = 10_000;
 // Current chamber 53R / 45D / 2I (King, Sanders — both caucus D) = 47
 // Dem-caucus; 13 of the 35 seats up are Dem-held; 47 - 13 = 34.
 const SENATE_BASELINE_DEM = 34;
-const SENATE_CONTROL = 51; // VP (R) breaks ties, so Dems need 51 outright party
+const SENATE_CONTROL = 51; // VP (R) breaks ties, so Dems need 51 outright
+
+/**
+ * The "+ Midterm drift" track: history says midterm polls understate the
+ * president's opposition — the November result moved toward the out-party
+ * in 6 of the last 8 midterms (avg +1.5, +2.7 excluding 2002), and the
+ * Bafumi/Erikson/Wlezien regression puts the effect near 3 margin points
+ * at this horizon. +2 is deliberately conservative. Party-symmetric by
+ * construction: under a Democratic president this same term would shift
+ * the environment toward Republicans. Published as a second view, never
+ * silently mixed into the default — November scores both (see the
+ * pre-registered rule on /methodology).
+ */
+const OUT_PARTY_DRIFT_PTS = 2;
+const PRESIDENT_PARTY: "D" | "R" = "R";
+const OUT_PARTY_SHIFT = PRESIDENT_PARTY === "R" ? OUT_PARTY_DRIFT_PTS : -OUT_PARTY_DRIFT_PTS;
 
 export async function runForecast(env: Env): Promise<RunSummary> {
   const now = new Date();
@@ -76,33 +91,39 @@ export async function runForecast(env: Env): Promise<RunSummary> {
   // not simulated as a contest.
   const contested = races.filter((r) => r.type !== "generic");
 
-  const simRaces: SimRace[] = [];
-  for (const race of contested) {
-    const polls = pollsByRace.get(race.id) ?? [];
-    const avg = averagePolls(polls, now, daysToElection);
-    const prior = fundamentalsPrior(
-      race,
-      { genericBallot, logFundraisingRatio: await fundraisingRatio(env, race.id) },
-      daysToElection,
+  // One fundraising query for all races (used by both tracks).
+  const fundraising = await fundraisingByRace(env);
+
+  // Both tracks share every input except the effective national environment.
+  const track = (effectiveGeneric: number | null, seed: string) => {
+    const simRaces: SimRace[] = contested.map((race) => {
+      const polls = pollsByRace.get(race.id) ?? [];
+      const avg = averagePolls(polls, now, daysToElection);
+      const prior = fundamentalsPrior(
+        race,
+        { genericBallot: effectiveGeneric, logFundraisingRatio: fundraising.get(race.id) ?? null },
+        daysToElection,
+      );
+      return { race, blended: blend(avg, prior), nPolls: polls.length };
+    });
+    const result = simulate(simRaces, daysToElection, N_SIMS, seed);
+    const senate = chamberSummary(
+      simRaces, result, (r) => r.type === "senate", SENATE_BASELINE_DEM, SENATE_CONTROL,
     );
-    simRaces.push({ race, blended: blend(avg, prior), nPolls: polls.length });
-  }
+    // All 435 House seats are modeled, so the baseline is 0 and 218 controls.
+    const house = chamberSummary(simRaces, result, (r) => r.type === "house", 0, 218);
+    // Topline carries only competitive districts (5%..95%); every district
+    // is still persisted and served via /races.
+    house.races = house.races.filter((f) => f.demWinProb > 0.05 && f.demWinProb < 0.95);
+    const governors = { races: result.forecasts.filter((f) => f.raceId.startsWith("gov-")) };
+    return { result, senate, house, governors };
+  };
 
-  const result = simulate(simRaces, daysToElection, N_SIMS, runId);
-
-  const senate = chamberSummary(
-    simRaces,
-    result,
-    (r) => r.type === "senate",
-    SENATE_BASELINE_DEM,
-    SENATE_CONTROL,
+  const measured = track(genericBallot, runId);
+  const adjusted = track(
+    genericBallot === null ? null : genericBallot + OUT_PARTY_SHIFT,
+    `${runId}-adjusted`,
   );
-
-  // All 435 House seats are modeled, so the baseline is 0 and 218 controls.
-  const house = chamberSummary(simRaces, result, (r) => r.type === "house", 0, 218);
-  // The topline summary carries only competitive districts (5%..95%); every
-  // district is still persisted and served via /races.
-  house.races = house.races.filter((f) => f.demWinProb > 0.05 && f.demWinProb < 0.95);
 
   const summary: RunSummary = {
     runId,
@@ -110,12 +131,18 @@ export async function runForecast(env: Env): Promise<RunSummary> {
     generatedAt: runId,
     daysToElection: Math.round(daysToElection),
     genericBallot,
-    senate,
-    house,
-    governors: { races: result.forecasts.filter((f) => f.raceId.startsWith("gov-")) },
+    senate: measured.senate,
+    house: measured.house,
+    governors: measured.governors,
+    adjusted: {
+      outPartyShift: OUT_PARTY_SHIFT,
+      senate: adjusted.senate,
+      house: adjusted.house,
+      governors: adjusted.governors,
+    },
   };
 
-  await persist(env, runId, result.forecasts, summary);
+  await persist(env, runId, measured.result.forecasts, summary);
   await env.FORECAST_CACHE.put("latest", JSON.stringify(summary));
   return summary;
 }
@@ -129,18 +156,24 @@ async function latestFundamental(env: Env, series: string): Promise<number | nul
   return row?.value ?? null;
 }
 
-async function fundraisingRatio(env: Env, raceId: string): Promise<number | null> {
+async function fundraisingByRace(env: Env): Promise<Map<string, number>> {
   const rows = (
     await env.DB.prepare(
-      "SELECT party, SUM(raised_usd) AS raised FROM candidates WHERE race_id = ? GROUP BY party",
-    )
-      .bind(raceId)
-      .all<{ party: string; raised: number | null }>()
+      "SELECT race_id, party, SUM(raised_usd) AS raised FROM candidates GROUP BY race_id, party",
+    ).all<{ race_id: string; party: string; raised: number | null }>()
   ).results;
-  const dem = rows.find((r) => r.party === "D")?.raised;
-  const rep = rows.find((r) => r.party === "R")?.raised;
-  if (!dem || !rep || dem <= 0 || rep <= 0) return null;
-  return Math.log(dem / rep);
+  const byRace = new Map<string, { dem?: number; rep?: number }>();
+  for (const r of rows) {
+    const entry = byRace.get(r.race_id) ?? {};
+    if (r.party === "D") entry.dem = r.raised ?? undefined;
+    if (r.party === "R") entry.rep = r.raised ?? undefined;
+    byRace.set(r.race_id, entry);
+  }
+  const out = new Map<string, number>();
+  for (const [raceId, { dem, rep }] of byRace) {
+    if (dem && rep && dem > 0 && rep > 0) out.set(raceId, Math.log(dem / rep));
+  }
+  return out;
 }
 
 async function persist(

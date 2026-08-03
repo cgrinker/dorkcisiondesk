@@ -83,6 +83,8 @@ body {
   cursor: pointer;
 }
 .tabs button.active { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.view-toggle { align-items: center; margin: -8px 0 16px; }
+.view-note { color: var(--muted); font-size: 12px; margin-left: 6px; }
 
 table.races { width: 100%; border-collapse: collapse; }
 table.races th {

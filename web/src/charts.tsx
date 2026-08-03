@@ -111,10 +111,13 @@ export function SeatHistogram({
 export function TrendChart({
   history,
   pick,
+  pickAlt,
   title,
 }: {
   history: HistoryRow[];
   pick: (h: HistoryRow) => number | undefined;
+  /** Optional second track (dashed, same hue — line style carries identity). */
+  pickAlt?: (h: HistoryRow) => number | undefined;
   title: string;
 }) {
   const tt = useTooltip();
@@ -122,8 +125,8 @@ export function TrendChart({
   const pts = history
     .slice()
     .reverse()
-    .map((h) => ({ runId: h.runId, v: pick(h) }))
-    .filter((p): p is { runId: string; v: number } => p.v !== undefined);
+    .map((h) => ({ runId: h.runId, v: pick(h), alt: pickAlt?.(h) }))
+    .filter((p): p is { runId: string; v: number; alt: number | undefined } => p.v !== undefined);
   if (pts.length < 2) {
     return (
       <div>
@@ -140,6 +143,12 @@ export function TrendChart({
   const x = (i: number) => (i / (pts.length - 1)) * (W - 8) + 4;
   const y = (v: number) => padT + (1 - v) * (H - padT - padB);
   const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const altPts = pts.filter((p): p is { runId: string; v: number; alt: number } => p.alt !== undefined);
+  const altPath = altPts.length >= 2
+    ? altPts
+        .map((p, i) => `${i === 0 ? "M" : "L"}${x(pts.indexOf(p)).toFixed(1)},${y(p.alt).toFixed(1)}`)
+        .join(" ")
+    : null;
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -151,6 +160,7 @@ export function TrendChart({
       <>
         <span className="t-label">{p.runId.slice(0, 16).replace("T", " ")} - </span>
         P(Dem control) {fmtPct(p.v)}
+        {p.alt !== undefined && <span className="t-label"> · with drift {fmtPct(p.alt)}</span>}
       </>
     ));
   };
@@ -178,7 +188,20 @@ export function TrendChart({
             </text>
           </g>
         ))}
+        {altPath && (
+          <>
+            <path d={altPath} fill="none" stroke="var(--dem)" strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" opacity={0.65} />
+            <text x={W - 4} y={y(altPts[altPts.length - 1]!.alt) - 5} fontSize={9} fill="var(--muted)" textAnchor="end">
+              + drift
+            </text>
+          </>
+        )}
         <path d={path} fill="none" stroke="var(--dem)" strokeWidth={2} strokeLinejoin="round" />
+        {altPath && (
+          <text x={W - 4} y={y(pts[pts.length - 1]!.v) + 12} fontSize={9} fill="var(--muted)" textAnchor="end">
+            measured
+          </text>
+        )}
         {hoverI !== null && (
           <g>
             <line x1={x(hoverI)} x2={x(hoverI)} y1={padT} y2={H - padB} stroke="var(--muted)" strokeWidth={1} />

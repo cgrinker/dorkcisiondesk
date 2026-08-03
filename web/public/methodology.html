@@ -92,6 +92,35 @@ MODEL RUN (every 2 hours, 10,000 simulations)
     This is why a candidate up 3 points on election eve is a ~73% favorite here, never 99%.
   </p>
 
+  <h2>Two views: "Measured" and "+ Midterm drift"</h2>
+  <p>
+    The forecast publishes two tracks that differ by <strong>exactly one number</strong>.
+    The default, <strong>Measured</strong>, is what current polls and election results say.
+    The second view, <strong>+ Midterm drift</strong>, shifts the national environment
+    <strong>2 points toward the president's opposition</strong>, because midterms historically
+    move that way between summer and November: in 6 of the last 8 midterms the final House
+    margin came in better for the out-party than the summer polls showed (average about
+    +1.5 points; +2.7 excluding 2002, the one clear exception), and the peer-reviewed
+    Bafumi–Erikson–Wlezien forecasting model puts the effect near 3 points at this point in
+    the cycle. The rule is party-blind: under a Democratic president the same term would
+    shift the environment toward Republicans.
+  </p>
+  <p>
+    Why publish both instead of picking one? The drift is well-evidenced but it is a claim
+    that a <em>historical pattern will recur</em> — not a measurement of 2026 — and our own
+    backtest cannot test it. Rather than silently include it (and be accused of chasing
+    hotter forecasts) or silently exclude it (and ignore history), we show both and let
+    November decide.
+  </p>
+  <div class="note">
+    <strong>Pre-registered scoring rule</strong> (written August 3, 2026, before any votes):
+    after the election we will score both tracks on (1) error in the national House popular-vote
+    margin, (2) Brier score across all race-level win probabilities, and (3) absolute error in
+    each chamber's seat count. The track that wins at least two of the three becomes the core
+    model for 2030, and both scores will be published regardless of which view looks better.
+    This paragraph will not be edited after election day.
+  </div>
+
   <h2>Backtest</h2>
   <p>
     The statistical core (poll averaging, house effects, blending, and the error model) is run as an

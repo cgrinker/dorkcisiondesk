@@ -31,6 +31,11 @@ export async function history(env: Env, url: URL): Promise<unknown> {
       genericBallot: s.genericBallot,
       senate: chamber(s.senate),
       house: chamber(s.house),
+      adjusted: s.adjusted && {
+        outPartyShift: s.adjusted.outPartyShift,
+        senate: chamber(s.adjusted.senate),
+        house: chamber(s.adjusted.house),
+      },
     };
   });
 }
@@ -177,7 +182,7 @@ export const DOCS = {
   election_day: "2026-11-03",
   endpoints: {
     "GET /": "Interactive dashboard (HTML).",
-    "GET /summary": "Latest full forecast: senate/house chamber summaries (competitive House districts only), governor races, generic ballot, stale flag, credits.",
+    "GET /summary": "Latest full forecast in two tracks: top-level fields are the default 'Measured' view (what polls + results say today); `adjusted` is the '+ Midterm drift' view — same model with the environment shifted `outPartyShift` pts toward the president's opposition, per the historical midterm pattern. Both tracks are scored after the election (pre-registered rule on /methodology). Includes chamber summaries (competitive House districts only), governor races, generic ballot, stale flag, credits.",
     "GET /races": "Latest per-race forecasts joined with race metadata and called nominees. Filters: ?type=senate|governor|house, ?state=XX, ?competitive=1 (5-95% only), ?limit=N.",
     "GET /races/{id}": "One race in full: metadata, candidate slate (nominee/incumbent/fundraising), latest forecast, forecast history across runs, recent polls. Ids look like sen-2026-GA, gov-2026-AZ, house-2026-TX-23.",
     "GET /polls": "Ingested polls, newest first. Filters: ?race=id, ?limit=N (<=500), ?offset=N.",

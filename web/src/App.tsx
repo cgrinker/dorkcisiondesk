@@ -15,6 +15,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [polls, setPolls] = useState<Record<string, PollRow[] | "loading">>({});
+  const [view, setView] = useState<"measured" | "adjusted">("measured");
 
   const toggleRace = (raceId: string) => setExpanded((cur) => (cur === raceId ? null : raceId));
 
@@ -43,6 +44,7 @@ export default function App() {
 
   const all = races[tab] ?? [];
   const rows = all.filter((r) => r.dem_win_prob > 0.05 && r.dem_win_prob < 0.95).slice(0, 40);
+  const active = view === "adjusted" && summary.adjusted ? summary.adjusted : summary;
 
   return (
     <div className="app">
@@ -52,16 +54,32 @@ export default function App() {
         election{summary.stale && <span className="stale"> · STALE</span>}
       </p>
 
+      {summary.adjusted && (
+        <div className="tabs view-toggle">
+          <button className={view === "measured" ? "active" : ""} onClick={() => setView("measured")}>
+            Measured
+          </button>
+          <button className={view === "adjusted" ? "active" : ""} onClick={() => setView("adjusted")}>
+            + Midterm drift
+          </button>
+          <span className="view-note">
+            {view === "measured"
+              ? "what polls and results say today"
+              : `same model, environment shifted ${summary.adjusted.outPartyShift > 0 ? "+" : ""}${summary.adjusted.outPartyShift} pts toward the out-party (what midterms historically do) — both views scored in November`}
+          </span>
+        </div>
+      )}
+
       <div className="cards">
         <Tile
           label="House control"
-          probDem={summary.house.demControlProb}
-          sub={`mean ${summary.house.meanSeats.toFixed(0)} D seats [${summary.house.seatsP10}–${summary.house.seatsP90}]`}
+          probDem={active.house.demControlProb}
+          sub={`mean ${active.house.meanSeats.toFixed(0)} D seats [${active.house.seatsP10}–${active.house.seatsP90}]`}
         />
         <Tile
           label="Senate control"
-          probDem={summary.senate.demControlProb}
-          sub={`mean ${summary.senate.meanSeats.toFixed(0)} Dem-caucus seats [${summary.senate.seatsP10}–${summary.senate.seatsP90}]`}
+          probDem={active.senate.demControlProb}
+          sub={`mean ${active.senate.meanSeats.toFixed(0)} Dem-caucus seats [${active.senate.seatsP10}–${active.senate.seatsP90}]`}
         />
         <div className="card">
           <div className="label">Generic ballot</div>
@@ -78,15 +96,25 @@ export default function App() {
 
       <div className="panel">
         <div className="panel-grid">
-          <SeatHistogram chamber={summary.house} threshold={218} title="House seat distribution" />
-          <SeatHistogram chamber={summary.senate} threshold={51} title="Senate seat distribution" />
+          <SeatHistogram chamber={active.house} threshold={218} title="House seat distribution" />
+          <SeatHistogram chamber={active.senate} threshold={51} title="Senate seat distribution" />
         </div>
       </div>
 
       <div className="panel">
         <div className="panel-grid">
-          <TrendChart history={history} pick={(h) => h.house?.demControlProb} title="House over time" />
-          <TrendChart history={history} pick={(h) => h.senate?.demControlProb} title="Senate over time" />
+          <TrendChart
+            history={history}
+            pick={(h) => h.house?.demControlProb}
+            pickAlt={(h) => h.adjusted?.house?.demControlProb}
+            title="House over time"
+          />
+          <TrendChart
+            history={history}
+            pick={(h) => h.senate?.demControlProb}
+            pickAlt={(h) => h.adjusted?.senate?.demControlProb}
+            title="Senate over time"
+          />
         </div>
       </div>
 
@@ -94,7 +122,7 @@ export default function App() {
         <h2>Race map</h2>
         <p className="desc">
           Every race equal weight — tiles are states{tab === "house" ? "; each small square is one district" : ""}.
-          Hover for the forecast.
+          Hover for the forecast. Race-level views show the Measured track.
         </p>
         <div className="tabs">
           {(["senate", "house", "governor"] as const).map((t) => (

@@ -26,6 +26,12 @@ export interface Summary {
   senate: ChamberSummary;
   house: ChamberSummary;
   governors: { races: RaceForecast[] };
+  adjusted?: {
+    outPartyShift: number;
+    senate: ChamberSummary;
+    house: ChamberSummary;
+    governors: { races: RaceForecast[] };
+  };
   stale: boolean;
 }
 
@@ -52,6 +58,11 @@ export interface HistoryRow {
   genericBallot: number | null;
   senate?: { demControlProb: number; meanSeats: number; seatsP10?: number; seatsP90?: number };
   house?: { demControlProb: number; meanSeats: number; seatsP10?: number; seatsP90?: number };
+  adjusted?: {
+    outPartyShift: number;
+    senate?: { demControlProb: number; meanSeats: number };
+    house?: { demControlProb: number; meanSeats: number };
+  };
 }
 
 async function get<T>(path: string): Promise<T> {

@@ -127,6 +127,25 @@ Simulate: national dice ±5.5 (93 days out), regional ±1.5, race dice ±3ish
 → the Democrat wins about 51% of pretend elections, 80% interval [−7, +8].
 A coin flip, honestly labeled.
 
+## The two views (one toggled number)
+
+The published forecast has two tracks. **Measured** (default) is everything
+above. **+ Midterm drift** adds one term: the national mood is shifted
+**2 points toward the president's opposition** before it enters step 2 —
+because in 6 of the last 8 midterms the November result was better for the
+out-party than summer polls showed (avg +1.5; +2.7 excluding 2002), and the
+Bafumi–Erikson–Wlezien regression estimates ~3 points at this horizon. The
+rule is party-blind (a Democratic president would flip its sign).
+
+**When does a term get a toggle instead of shipping in the core?** Only when
+all three hold: (a) it's evidenced by real election history but can't be
+validated by our own backtest harness; (b) reasonable modelers genuinely
+disagree about it; (c) it's a single separable plain-math term. Everything
+else either ships in the core (with backtest receipts) or doesn't ship.
+Other models' outputs — betting markets, expert ratings — never qualify for
+either. Both tracks are scored after the election under the pre-registered
+rule on the methodology page.
+
 ## Every constant, and where it came from
 
 | Constant | Value | Source |
