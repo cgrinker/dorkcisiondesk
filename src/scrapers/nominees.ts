@@ -34,7 +34,11 @@ const PRIMARY_DATES: Record<string, string> = {
   MI: "2026-08-04",
   KS: "2026-08-04",
   TN: "2026-08-06",
+  HI: "2026-08-08",
   MN: "2026-08-11",
+  VT: "2026-08-11",
+  WI: "2026-08-11",
+  CT: "2026-08-11",
   AK: "2026-08-18",
   FL: "2026-08-18",
   WY: "2026-08-18",
@@ -195,12 +199,17 @@ async function fetchRacePage(race: { id: string; state: string; type: string }):
  * "(D)"/"(R)" marker after the name; party-primary blocks imply the party of
  * everyone in them. Write-ins are skipped.
  */
-export function parseCandidates(html: string): { name: string; party: string }[] {
+export function parseCandidates(html: string, cycleYear = "2026"): { name: string; party: string }[] {
   const blocks = html.split('class="votebox"');
   const out = new Map<string, string>();
   let generalsSeen = 0;
 
   for (const block of blocks.slice(1)) {
+    // A block is only current-cycle if it says so: pages whose primary
+    // hasn't happened may carry NO current boxes at all, making the first
+    // "General election" block the PREVIOUS cycle's completed race (VT/AK/
+    // HI/WY all bit us). Position is not proof; the year is.
+    if (!block.slice(0, 2500).includes(cycleYear)) break;
     const heading = /votebox-header-election-type[^>]*>([^<]+)/.exec(block)?.[1]?.trim() ?? "";
     // Winner names may be wrapped in <b><u> — tolerate inline formatting
     // tags between the cell and the anchor, and after the anchor closes.
@@ -245,7 +254,7 @@ export function parseCandidates(html: string): { name: string; party: string }[]
  * primary/runoff results are the fallback when the general block hasn't
  * been populated for that party yet.
  */
-export function parseNominees(html: string): { D?: string; R?: string } {
+export function parseNominees(html: string, cycleYear = "2026"): { D?: string; R?: string } {
   const blocks = html.split('class="votebox"');
   const result: { D?: string; R?: string } = {};
   const seen = { primary: {} as Record<string, string[]>, runoff: {} as Record<string, string[]> };
@@ -253,6 +262,8 @@ export function parseNominees(html: string): { D?: string; R?: string } {
 
   let generalsSeen = 0;
   for (const block of blocks.slice(1)) {
+    // Year gate — see parseCandidates: block position is not proof of cycle.
+    if (!block.slice(0, 2500).includes(cycleYear)) break;
     const heading = /votebox-header-election-type[^>]*>([^<]+)/.exec(block)?.[1]?.trim() ?? "";
     if (/^General election/i.test(heading)) {
       generalsSeen++;

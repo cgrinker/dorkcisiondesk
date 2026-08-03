@@ -184,8 +184,9 @@ describe("candidate matching and nominee filter", () => {
 });
 
 describe("ballotpedia nominee parsing", () => {
-  const block = (heading: string, rows: { name: string; winner: boolean }[]) =>
+  const block = (heading: string, rows: { name: string; winner: boolean }[], year = "2026") =>
     `class="votebox"><div class="votebox-header-election-type">${heading}</div>` +
+    `<p>The election will occur on November 3, ${year}.</p>` +
     rows
       .map(
         (r) =>
@@ -203,9 +204,21 @@ describe("ballotpedia nominee parsing", () => {
       ]) +
       block("Republican primary for U.S. Senate Michigan", [{ name: "Mike Rogers", winner: true }]) +
       // Older cycle below the second General heading — must be ignored.
-      block("General election for U.S. Senate Michigan", [{ name: "Elissa Slotkin", winner: true }]) +
-      block("Democratic primary for U.S. Senate Michigan", [{ name: "Elissa Slotkin", winner: true }]);
+      block("General election for U.S. Senate Michigan", [{ name: "Elissa Slotkin", winner: true }], "2024") +
+      block("Democratic primary for U.S. Senate Michigan", [{ name: "Elissa Slotkin", winner: true }], "2024");
     expect(parseNominees(html)).toEqual({ D: "Haley Stevens", R: "Mike Rogers" });
+  });
+
+  it("a page with NO current-cycle boxes yields nothing (pre-primary VT/AK pattern)", () => {
+    // First general block on the page is the completed PREVIOUS cycle.
+    const stale =
+      block("General election for Governor of Vermont", [
+        { name: "Phil Scott", winner: true },
+        { name: "Esther Charlestin", winner: false },
+      ], "2024") +
+      block("Democratic primary for Governor of Vermont", [{ name: "Esther Charlestin", winner: true }], "2024");
+    expect(parseNominees(stale)).toEqual({});
+    expect(parseCandidates(stale)).toEqual([]);
   });
 
   it("does not call an undecided primary", () => {
@@ -219,11 +232,11 @@ describe("ballotpedia nominee parsing", () => {
   it("harvests candidates with parties from general and primary blocks", () => {
     const html =
       `class="votebox"><div class="votebox-header-election-type">General election for Governor of Arizona</div>` +
-      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Katie Hobbs</a> (D)  </td></tr>` +
+      `<p>on November 3, 2026</p><tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Katie Hobbs</a> (D)  </td></tr>` +
       `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Andy Biggs</a> (R)&#160;</td></tr>` +
       `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Liana West</a> (G)&#160;(Write-in)</td></tr>` +
       `class="votebox"><div class="votebox-header-election-type">Democratic primary for Governor of Arizona</div>` +
-      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Marco Lopez</a> &#160;</td></tr>` +
+      `<p>on July 21, 2026</p><tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Marco Lopez</a> &#160;</td></tr>` +
       `class="votebox"><div class="votebox-header-election-type">General election for Governor of Arizona</div>` +
       `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Old Timer</a> (D)</td></tr>`;
     expect(parseCandidates(html)).toEqual([
@@ -236,7 +249,7 @@ describe("ballotpedia nominee parsing", () => {
   it("handles winner names wrapped in bold/underline (unopposed primaries)", () => {
     const html =
       `class="votebox"><div class="votebox-header-election-type">Democratic primary for Governor of Arizona</div>` +
-      `<tr class="results_row  winner"><td class="votebox-results-cell--check">&#10004;</td>` +
+      `<p>on July 21, 2026</p><tr class="results_row  winner"><td class="votebox-results-cell--check">&#10004;</td>` +
       `<td class="votebox-results-cell--text"><b><u><a href="#">Katie Hobbs</a></u></b></td></tr>`;
     expect(parseNominees(html)).toEqual({ D: "Katie Hobbs" });
     expect(parseCandidates(html)).toEqual([{ name: "Katie Hobbs", party: "D" }]);
@@ -245,7 +258,7 @@ describe("ballotpedia nominee parsing", () => {
   it("general-election slate overrides the primary record (post-primary withdrawal)", () => {
     const html =
       `class="votebox"><div class="votebox-header-election-type">General election for U.S. Senate Maine</div>` +
-      `<tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Troy Dale Jackson</a> (D)  </td></tr>` +
+      `<p>on November 3, 2026</p><tr class="results_row"><td class="votebox-results-cell--text"><a href="#">Troy Dale Jackson</a> (D)  </td></tr>` +
       `class="votebox"><div class="votebox-header-election-type">Democratic primary for U.S. Senate Maine</div>` +
       `<p>The following candidates advanced from the Democratic ranked-choice voting primary: <a href="#">Graham Platner</a> in round 1.</p>`;
     expect(parseNominees(html)).toEqual({ D: "Troy Dale Jackson" });
