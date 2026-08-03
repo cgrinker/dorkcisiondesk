@@ -35,6 +35,7 @@ const race = (id: string, overrides: Partial<Race> = {}): Race => ({
   district: null,
   partisanLean: -1,
   incumbentParty: "D",
+  incumbentLastMargin: null,
   region: "south",
   ...overrides,
 });
@@ -113,6 +114,26 @@ describe("poll adjustments", () => {
     );
     expect(fresh.margin).toBeCloseTo(10);
     expect(staleAndFresh.margin).toBeGreaterThan(5); // stale poll pulls down only slightly
+  });
+});
+
+describe("candidate history (crossover incumbents)", () => {
+  it("a repeat incumbent's own record dominates the structural guess", () => {
+    // Vermont-style: deep-blue lean, wildly overperforming R incumbent.
+    const vt = race("gov-2026-VT", {
+      type: "governor", state: "VT", partisanLean: 30,
+      incumbentParty: "R", incumbentLastMargin: -51.6,
+    });
+    const prior = fundamentalsPrior(vt, { genericBallot: 4.5, logFundraisingRatio: null }, 90);
+    expect(prior.margin).toBeLessThan(-35); // Scott heavily favored despite D+30 lean
+  });
+
+  it("without history, behavior is unchanged (flat incumbency)", () => {
+    const withHist = fundamentalsPrior(
+      race("x", { incumbentLastMargin: null, incumbentParty: "D", partisanLean: 5 }),
+      { genericBallot: 4, logFundraisingRatio: null }, 90,
+    );
+    expect(withHist.margin).toBeCloseTo(5 + 0.8 * 4 + 2.5, 5);
   });
 });
 

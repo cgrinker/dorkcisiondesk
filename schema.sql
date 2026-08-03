@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS races (
   -- Partisan lean of the state/district in Dem margin points (Cook-PVI-like, e.g. R+5 => -5).
   partisan_lean REAL,
   incumbent_party TEXT CHECK (incumbent_party IN ('D','R','I','open')),
+  -- Dem-minus-Rep margin of the incumbent's most recent win in this race,
+  -- set only when the same person is running again (candidate-history term).
+  incumbent_last_margin REAL,
   region TEXT,                    -- for correlated regional error (northeast/south/midwest/west/...)
   notes TEXT
 );

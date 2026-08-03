@@ -37,6 +37,8 @@ export interface Race {
   district: number | null;
   partisanLean: number | null;
   incumbentParty: Party | null;
+  /** Incumbent's last Dem margin in this race, when the same person runs again. */
+  incumbentLastMargin: number | null;
   region: string | null;
 }
 

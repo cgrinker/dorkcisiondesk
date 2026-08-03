@@ -117,7 +117,7 @@ describe("backtest: 2006-2022 Senate + Governor races, election-eve, polls-only 
       const blended = blend(avg, { margin: 0, sd: 25 }); // effectively polls-only
       const race: Race = {
         id: k, cycle: 0, type: "senate", state: k.slice(-2),
-        district: null, partisanLean: null, incumbentParty: null, region: null,
+        district: null, partisanLean: null, incumbentParty: null, incumbentLastMargin: null, region: null,
       };
       return { race, blended, nPolls: pollsByRace.get(k)!.length };
     });

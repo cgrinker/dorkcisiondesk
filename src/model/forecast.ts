@@ -196,6 +196,7 @@ function rowToRace(row: Record<string, unknown>): Race {
     district: (row.district as number) ?? null,
     partisanLean: (row.partisan_lean as number) ?? null,
     incumbentParty: (row.incumbent_party as Race["incumbentParty"]) ?? null,
+    incumbentLastMargin: (row.incumbent_last_margin as number) ?? null,
     region: (row.region as string) ?? null,
   };
 }
